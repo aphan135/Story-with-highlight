@@ -1,0 +1,28 @@
+.panel {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--quiet);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  scrollbar-color: var(--quiet) var(--paper);
+}
+.panel summary { padding: 12px 16px; cursor: pointer; font-weight: 700; }
+.badge { margin-left: 8px; color: var(--accent); font-size: 11px; }
+.content { padding: 0 16px 16px; }
+.content dl { margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+.content dl div { display: flex; justify-content: space-between; gap: 12px; }
+.content dd { margin: 0; }
+.content button { padding: 8px 16px; min-height: 44px; border: 1px solid var(--accent); border-radius: 8px; background: var(--glow); color: var(--ink); cursor: pointer; font: inherit; }
+.content button:hover { background: var(--paper); }
+.error { color: var(--accent); overflow-wrap: anywhere; }
+.transcript { max-height: min(260px, 35dvh); overflow: auto; margin-top: 12px; overflow-wrap: anywhere; }
+.transcript p { margin: 0 0 8px; }
+.transcript strong { text-transform: capitalize; }

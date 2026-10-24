@@ -1,0 +1,153 @@
+/* The Figma frames are a fixed 1194 x 834 iPad canvas with absolute layout.
+   The stage keeps that aspect ratio and every length is written as
+   (Figma px) * var(--u), so the whole screen scales as one picture.
+   ponytail: below ~700px wide the text gets small; add a portrait layout if
+   phones matter. */
+
+.fit { container-type: inline-size; width: min(100%, calc((100dvh - 32px) * 1194 / 834)); }
+.stage {
+  --u: calc(100cqw / 1194);
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1194 / 834;
+  overflow: hidden;
+  border-radius: calc(30.406 * var(--u));
+  background: var(--sq-cream);
+  color: var(--sq-ink);
+}
+.apricot { background: var(--sq-apricot); }
+.sky { background: var(--sq-sky); border-radius: calc(26.063 * var(--u)); }
+
+.abs { position: absolute; }
+.logo {
+  position: absolute; left: calc(84.44 * var(--u)); top: calc(30.41 * var(--u)); margin: 0;
+  font: 500 calc(27.148 * var(--u))/1.2 var(--font-display), sans-serif;
+}
+.back {
+  position: absolute; left: calc(1011.83 * var(--u)); top: calc(43.44 * var(--u));
+  padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
+  font: 700 calc(18.461 * var(--u))/1.2 var(--font-body), sans-serif;
+}
+
+/* --- shared pieces ---------------------------------------------------------- */
+
+.primary {
+  display: flex; align-items: center; justify-content: center;
+  height: calc(67.328 * var(--u));
+  padding: calc(15.203 * var(--u)) calc(30.406 * var(--u));
+  border: 0; border-radius: calc(30.406 * var(--u));
+  background: var(--sq-ink); color: var(--sq-cream); cursor: pointer;
+  font: 800 calc(23.89 * var(--u))/1.2 var(--font-body), sans-serif;
+}
+.primary:hover { filter: brightness(1.15); }
+.primary:disabled { opacity: .6; cursor: progress; }
+.link {
+  padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left;
+  font: 700 calc(18.461 * var(--u))/1.25 var(--font-body), sans-serif;
+}
+
+/* --- home ------------------------------------------------------------------------ */
+
+.rise { left: calc(464.52 * var(--u)); top: calc(293.2 * var(--u)); width: calc(1172.813 * var(--u)); height: calc(1140.234 * var(--u)); }
+.foxHome { left: calc(497.09 * var(--u)); top: calc(262.8 * var(--u)); width: calc(812.281 * var(--u)); height: calc(849.203 * var(--u)); }
+.welcome { left: calc(110.5 * var(--u)); top: calc(195.47 * var(--u)); width: calc(456.094 * var(--u)); display: flex; flex-direction: column; gap: calc(18.461 * var(--u)); }
+.hero { margin: 0; width: calc(439.805 * var(--u)); font: 500 calc(60.813 * var(--u))/1.2 var(--font-display), sans-serif; }
+.heroSub { margin: 0; color: var(--sq-muted); font: 400 calc(23.891 * var(--u))/1.2 var(--font-body), sans-serif; }
+.begin { position: absolute; left: calc(110.5 * var(--u)); top: calc(475.64 * var(--u)); width: calc(390.938 * var(--u)); height: calc(69.5 * var(--u)); }
+.grownUp { left: calc(110.5 * var(--u)); top: calc(571.2 * var(--u)); width: calc(380.078 * var(--u)); margin: 0; font: 700 calc(18.461 * var(--u))/1.2 var(--font-body), sans-serif; }
+
+/* --- grown-up setup / voice check / mic help ------------------------------------ */
+
+.foxSetup { left: calc(497.09 * var(--u)); top: calc(-11.95 * var(--u)); width: calc(812.281 * var(--u)); height: calc(849.203 * var(--u)); }
+.setup { left: calc(110.5 * var(--u)); top: calc(200.9 * var(--u)); width: calc(456.094 * var(--u)); display: flex; flex-direction: column; gap: calc(21.719 * var(--u)); }
+.setup > * { margin: 0; }
+.eyebrow { font: 700 calc(16.289 * var(--u))/1.25 var(--font-body), sans-serif; text-transform: uppercase; }
+.title { font: 500 calc(49.953 * var(--u))/1.25 var(--font-display), sans-serif; }
+.titleSm { font: 500 calc(47.781 * var(--u))/1.25 var(--font-display), sans-serif; }
+.body { font: 400 calc(22.805 * var(--u))/1.25 var(--font-body), sans-serif; }
+.bodyStrong { font: 700 calc(21.719 * var(--u))/1.25 var(--font-body), sans-serif; }
+.foot { font: 400 calc(19.547 * var(--u))/1.25 var(--font-body), sans-serif; }
+
+/* Five bars; the mic level (0..1, set from JS as --level) stretches them. */
+.wave { display: flex; align-items: center; gap: calc(9.773 * var(--u)); height: calc(65.156 * var(--u)); --level: 0; }
+.wave i {
+  width: calc(13.031 * var(--u)); border-radius: calc(6.516 * var(--u)); background: var(--sq-ink);
+  height: calc(var(--h) * var(--u) * (0.35 + 0.65 * var(--level)));
+  transition: height 80ms linear;
+}
+.wave i:nth-child(1), .wave i:nth-child(5) { --h: 23.891; }
+.wave i:nth-child(2), .wave i:nth-child(4) { --h: 45.609; }
+.wave i:nth-child(3) { --h: 65.156; }
+
+/* --- bookshelf ---------------------------------------------------------------------- */
+
+.shelfTitle { left: calc(343.98 * var(--u)); top: calc(159.63 * var(--u)); width: calc(760.156 * var(--u)); margin: 0; font: 500 calc(49.953 * var(--u))/1.25 var(--font-display), sans-serif; }
+.shelfSub { left: calc(343.98 * var(--u)); top: calc(234.56 * var(--u)); width: calc(760.156 * var(--u)); margin: 0; font: 400 calc(26.063 * var(--u))/1.25 var(--font-body), sans-serif; }
+.shelf { left: calc(266.88 * var(--u)); top: calc(660.25 * var(--u)); width: calc(843.773 * var(--u)); height: calc(23.891 * var(--u)); border-radius: calc(11.945 * var(--u)); background: var(--sq-fox); }
+.foxShelf { left: calc(24.71 * var(--u)); top: calc(497.36 * var(--u)); width: calc(325.781 * var(--u)); height: calc(340.589 * var(--u)); }
+.cover {
+  position: absolute; top: calc(335.55 * var(--u)); overflow: hidden; padding: 0; border: 0;
+  border-radius: calc(15.638 * var(--u)); background: var(--sq-purple);
+}
+.cover img { object-fit: cover; }
+button.cover { cursor: pointer; transition: transform .2s ease; }
+button.cover:hover { transform: scale(1.04); }
+.coverPigs { left: calc(343.98 * var(--u)); width: calc(234.563 * var(--u)); height: calc(312.75 * var(--u)); }
+.coverRed { left: calc(594.83 * var(--u)); width: calc(232.391 * var(--u)); height: calc(313.836 * var(--u)); }
+.coverGold { left: calc(845.68 * var(--u)); width: calc(234.563 * var(--u)); height: calc(313.836 * var(--u)); }
+.shelfHint { left: calc(345.06 * var(--u)); top: calc(717.8 * var(--u)); width: calc(705.859 * var(--u)); margin: 0; font: 700 calc(23.891 * var(--u))/1.25 var(--font-body), sans-serif; }
+.invite {
+  left: calc(71.41 * var(--u)); top: calc(362.7 * var(--u)); width: calc(222.617 * var(--u)); height: calc(122.711 * var(--u));
+  border-radius: calc(28.234 * var(--u)); background: var(--sq-white);
+  display: grid; place-items: center; margin: 0; text-align: center;
+  font: 700 calc(26.063 * var(--u))/1.25 var(--font-body), sans-serif;
+}
+
+/* --- story page ---------------------------------------------------------------------- */
+
+.scene { left: 0; top: calc(-112.2 * var(--u)); width: 100%; height: calc(895.5 * var(--u)); }
+.scene img { object-fit: cover; }
+.storyLogo { left: calc(71.41 * var(--u)); top: calc(23.89 * var(--u)); margin: 0; font: 800 calc(22.805 * var(--u))/1.2 var(--font-body), sans-serif; }
+.textBar {
+  left: 0; top: calc(738.44 * var(--u)); width: 100%; height: calc(95.563 * var(--u));
+  background: var(--sq-paper);
+  display: flex; align-items: center; gap: calc(24 * var(--u));
+  padding: 0 calc(84.44 * var(--u));
+}
+.storyText { flex: 1; margin: 0; font: 800 calc(30.406 * var(--u))/1.2 var(--font-body), sans-serif; }
+.textBar .wave { height: calc(48 * var(--u)); }
+.barButton { height: calc(56 * var(--u)); padding-inline: calc(28 * var(--u)); font-size: calc(20 * var(--u)); white-space: nowrap; }
+
+/* Speech bubble. Position comes from the speaker; the tail points at them. */
+.bubble {
+  position: absolute; margin: 0;
+  padding: calc(30.406 * var(--u)); border-radius: calc(30.406 * var(--u));
+  background: var(--sq-white);
+  font: 800 calc(33.02 * var(--u))/1.25 var(--font-body), sans-serif;
+  animation: pop .25s ease-out;
+}
+.tail { position: absolute; top: calc(100% - 4 * var(--u)); width: calc(30.094 * var(--u)); height: calc(27.691 * var(--u)); transform: rotate(180deg); }
+/* Figma: child line above the youngest pig (DEMO 05). */
+.child { left: calc(655 * var(--u)); top: calc(142 * var(--u)); width: calc(477.813 * var(--u)); }
+.child .tail { left: calc(269.5 * var(--u)); }
+/* Figma: character dialogue above the middle pig (DEMO 08). */
+.center { left: calc(301.63 * var(--u)); top: calc(91 * var(--u)); width: calc(749.297 * var(--u)); }
+.center .tail { left: calc(239.1 * var(--u)); }
+/* Figma: eldest pig on the left (DEMO 01a); used for the wolf. */
+.left { left: calc(93.13 * var(--u)); top: calc(58.64 * var(--u)); width: calc(600.523 * var(--u)); }
+.left .tail { left: calc(165.3 * var(--u)); }
+.reading { outline: calc(5 * var(--u)) solid var(--sq-fox); }
+
+/* READ ALOUD word highlighting (../reader.ts drives progress and stuck). */
+.w { display: inline-block; margin-right: .28em; padding: 0 .08em; border-radius: calc(8 * var(--u)); transition: background .15s; }
+.wRead { background: var(--sq-mark); }
+.wNext { box-shadow: inset 0 calc(-4 * var(--u)) 0 var(--sq-apricot); }
+.wStuck { outline: calc(4 * var(--u)) dashed var(--sq-fox); outline-offset: calc(3 * var(--u)); animation: nudge 1.2s ease-in-out infinite; }
+@keyframes nudge { 50% { outline-color: transparent; } }
+
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bubble { animation: none; }
+  .wave i { transition: none; }
+  button.cover { transition: none; }
+}
