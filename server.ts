@@ -27,6 +27,18 @@ import { coachLine } from "./prompts";
 
 const KEY = process.env.CARTESIA_API_KEY!;
 const VERSION = "2026-03-01";
+/**
+ * 캐릭터별 말 속도. 1.0 이 기본이고 0.6~1.5 범위다. 문서상 엄밀한 배수가
+ * 아니라 가이드라서, 확실히 느리게 하려면 크게 낮춰야 한다.
+ * 내레이터는 아이가 이야기를 따라올 수 있어야 하므로 가장 느리다.
+ */
+const SPEED: Record<Speaker, number> = {
+  narrator: 0.65,
+  firstPig: 0.8,
+  secondPig: 0.8,
+  wolf: 0.7,
+};
+
 const VOICES: Record<Speaker, string> = {
   narrator: process.env.NARRATOR_VOICE_ID!,
   firstPig: process.env.FIRST_PIG_VOICE_ID!,
@@ -44,6 +56,12 @@ const SILENCE_MS = 8000;
 // ---------------------------------------------------------------------------
 
 type Session = {
+  /** 진단용: 브라우저에서 오디오가 한 번이라도 도착했는가. */
+  sawAudio?: boolean;
+  /** 보이스 오류로 내레이터 목소리로 재시도 중인가. */
+  retrying?: boolean;
+  /** 재시도에 쓸 마지막 대사. */
+  lastLine?: string;
   browser: WebSocket;
   ink: WebSocket;
   sonic: WebSocket;
@@ -154,7 +172,21 @@ function openSonic(session: Session) {
       send(session, { type: "audio_done" });
     }
 
-    if (msg.type === "error") console.error("[sonic]", msg);
+    if (msg.type === "error") {
+      console.error("[sonic]", msg.error_code ?? "", msg.message ?? "");
+
+      // 보이스 ID가 틀리면 그 대사가 통째로 사라진다. 데모 중에 캐릭터가
+      // 말없이 넘어가느니 내레이터 목소리로라도 들려주는 편이 낫다.
+      if (msg.context_id === session.contextId && !session.retrying && session.lastLine) {
+        session.retrying = true;
+        console.log("[sonic] 내레이터 목소리로 다시 시도");
+        sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator);
+        return;
+      }
+
+      // 재시도까지 실패했다. 기다리던 쪽을 풀어줘야 이야기가 멈추지 않는다.
+      played(session);
+    }
   };
 
   sonic.onerror = (e) => console.error("[sonic]", e);
@@ -178,29 +210,48 @@ function say(session: Session, speaker: Speaker, line: string, question = false)
   session.audioAt = performance.now();
   send(session, { type: "line", id: contextId, speaker, line, question });
 
+  session.lastLine = line;
+  session.retrying = false;
+  sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker]);
+
+  return new Promise((resolve) => (session.onPlayed = resolve));
+}
+
+function sendToSonic(
+  session: Session,
+  voiceId: string,
+  line: string,
+  contextId: string,
+  speed: number
+) {
   session.sonic.send(
     JSON.stringify({
       model_id: "sonic-3.5",
       transcript: line,
-      voice: { mode: "id", id: VOICES[speaker] },
+      voice: { mode: "id", id: voiceId },
       language: "en",
+      generation_config: { speed },
       context_id: contextId,
       continue: false, // last chunk for this context — lowest latency
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 24000 },
     })
   );
-
-  return new Promise((resolve) => (session.onPlayed = resolve));
 }
 
+/** 대사 사이의 쉼. 책을 읽어줄 때처럼 한 박자 두고 넘어간다. */
+const BEAT_MS = 700;
+
 /** The current line is over, whether it finished or was cut off. */
-function played(session: Session) {
+function played(session: Session, pause = false) {
   session.audioPlaying = false;
   session.waitingSince = performance.now();
   session.reader?.restartClock();
   const resolve = session.onPlayed;
   session.onPlayed = null;
-  resolve?.();
+  if (!resolve) return;
+  // 끊고 들어온 경우(pause=false)는 기다리지 않는다. 아이가 말하는 중이다.
+  if (pause) setTimeout(resolve, BEAT_MS);
+  else resolve();
 }
 
 /** The child started talking over a line: stop it. */
@@ -394,8 +445,15 @@ Bun.serve<{ demo: boolean }, never>({
       if (typeof data === "string") {
         const msg = JSON.parse(data);
         // Only the line still current counts; a late report for an older one is ignored.
-        if (msg.type === "played" && msg.id === session.contextId) played(session);
+        // 재생이 실제로 끝난 경우에만 한 박자 쉬고 다음으로 간다.
+        if (msg.type === "played" && msg.id === session.contextId) played(session, true);
         return;
+      }
+
+      // 진단용: 마이크 소리가 실제로 도착하는지 한 번만 찍는다.
+      if (!session.sawAudio) {
+        session.sawAudio = true;
+        console.log("[mic] 오디오 수신 시작 — 브라우저 마이크는 살아 있음");
       }
 
       // Binary frames are mic audio, straight through to Ink.

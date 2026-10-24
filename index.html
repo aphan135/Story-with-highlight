@@ -179,15 +179,19 @@ function onServerMessage(e) {
     generation++;
     lineId = msg.id; lineDone = false; reported = false;
     highlight(msg.speaker);
-    if ($('bubbleRow').classList.contains('on')) {
-      // While a bubble is up, the narrator's coaching shows under it.
-      $('yourTurn').textContent = msg.line;
-    } else {
-      // FREE RESPONSE shows the question only — nothing for the child to read back.
-      $('speech').textContent = msg.line;
-      $('speech').classList.toggle('question', msg.question);
-      $('yourTurn').textContent = msg.question ? '🎤 Your turn! Say your answer.' : '';
-    }
+
+    // 캐릭터의 대사는 항상 같은 자리에 보여야 한다. 말풍선이 떠 있을 때
+    // 아래쪽 힌트 칸에만 넣으면, 늑대나 내레이터가 말해도 화면에서는
+    // 안 보이는 것처럼 느껴진다.
+    $('speech').textContent = msg.line;
+    $('speech').classList.toggle('question', !!msg.question);
+
+    const bubbleUp = $('bubbleRow').classList.contains('on');
+    $('yourTurn').textContent = bubbleUp
+      ? '🎤 Your turn! Read it out loud.'
+      : msg.question
+        ? '🎤 Your turn! Say your answer.'
+        : '';
     $('partial').textContent = '';
   }
   if (msg.type === 'scene') { $('title').textContent = msg.title; $('art').textContent = msg.art; $('caption').textContent = msg.caption; }
