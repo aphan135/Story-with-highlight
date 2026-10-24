@@ -9,39 +9,52 @@
 <style>
   :root {
     --paper: #f7f0e1; --page: #fffdf7; --ink: #2b2620; --muted: #8a7f6e;
-    --mark: #ffe066; --stuck: #e07a5f; --owl: #6b5b95; --pip: #e88aa0;
+    --mark: #ffe066; --stuck: #e07a5f;
+    --narrator: #5b6c8f; --firstPig: #d9739b; --secondPig: #c45c3c; --wolf: #5d5d5d; --you: #3a9d5d;
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink);
          font-family: Andika, "Comic Sans MS", system-ui, sans-serif;
-         display: grid; place-items: center; padding: 16px; }
+         display: grid; place-items: center; padding: 16px 16px 40px; }
 
-  /* The book */
-  #book { width: min(820px, 100%); background: var(--page); border-radius: 18px;
-          padding: 40px 48px 28px; box-shadow: 0 10px 30px rgba(60,40,10,.12); }
-  #words { font-size: clamp(24px, 4vw, 38px); line-height: 1.9; min-height: 6em; }
+  #book { width: min(860px, 100%); background: var(--page); border-radius: 18px;
+          padding: 28px 36px; box-shadow: 0 10px 30px rgba(60,40,10,.12); }
+  #title { font-size: 20px; color: var(--muted); text-align: center; }
+
+  /* The picture */
+  #art { font-size: clamp(48px, 10vw, 96px); text-align: center; margin: 12px 0 4px;
+         min-height: 1.3em; letter-spacing: .05em; }
+  #caption { text-align: center; color: var(--muted); font-style: italic; font-size: 17px; min-height: 1.4em; }
+
+  /* Who is talking */
+  #cast { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 20px 0 14px; }
+  .who { padding: 6px 12px; border-radius: 999px; background: #f1ead9; color: var(--muted);
+         font-size: 16px; transition: all .15s; }
+  .who.on { color: #fff; transform: scale(1.08); }
+  .who[data-k=narrator].on  { background: var(--narrator); }
+  .who[data-k=firstPig].on  { background: var(--firstPig); }
+  .who[data-k=secondPig].on { background: var(--secondPig); }
+  .who[data-k=wolf].on      { background: var(--wolf); }
+  .who[data-k=you].on       { background: var(--you); }
+
+  /* What the AI says */
+  #speech { font-size: clamp(20px, 3vw, 28px); line-height: 1.45; min-height: 2.9em; text-align: center; }
+  #speech.question { font-weight: 700; }
+  #yourTurn { text-align: center; color: var(--you); font-size: 18px; min-height: 1.4em; margin-top: 6px; }
+
+  /* READ ALOUD bubble, beside the youngest pig */
+  #bubbleRow { display: none; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
+  #bubbleRow.on { display: flex; }
+  #bubbleRow .pig { font-size: 56px; }
+  #bubble { position: relative; background: #fff; border: 3px solid var(--you); border-radius: 22px;
+            padding: 14px 22px; font-size: clamp(26px, 4.5vw, 40px); line-height: 1.6; }
+  #bubble::before { content: ""; position: absolute; left: -14px; top: 50%; margin-top: -10px;
+                    border: 10px solid transparent; border-right-color: var(--you); border-left: 0; }
   .w { padding: 0 3px; border-radius: 6px; transition: background .15s; }
   .w.read { background: var(--mark); }
   .w.current { box-shadow: inset 0 -3px 0 #d8c9a3; }
-  .w.stuck { outline: 3px dashed var(--stuck); outline-offset: 2px;
-             animation: nudge 1.2s ease-in-out infinite; }
+  .w.stuck { outline: 3px dashed var(--stuck); outline-offset: 2px; animation: nudge 1.2s ease-in-out infinite; }
   @keyframes nudge { 50% { outline-color: transparent; } }
-  #foot { display: flex; justify-content: space-between; align-items: center;
-          margin-top: 18px; color: var(--muted); font-size: 18px; gap: 12px; }
-  #caption { font-style: italic; }
-
-  /* Question pop-up */
-  #ask { position: fixed; inset: 0; background: rgba(43,38,32,.35);
-         display: none; place-items: center; padding: 16px; }
-  #ask.on { display: grid; }
-  #card { width: min(640px, 100%); background: var(--page); border-radius: 22px;
-          padding: 28px 32px; box-shadow: 0 16px 40px rgba(0,0,0,.2);
-          animation: pop .25s ease-out; }
-  @keyframes pop { from { transform: scale(.9); opacity: 0; } }
-  #who { font-weight: 700; font-size: 20px; margin-bottom: 8px; }
-  #who.owl { color: var(--owl); } #who.pip { color: var(--pip); }
-  #question { font-size: clamp(22px, 3.5vw, 32px); line-height: 1.4; }
-  #hint { margin-top: 14px; color: var(--muted); font-size: 18px; }
 
   #start { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); }
   #start button { font: inherit; font-size: 28px; padding: 18px 36px; border: 0;
@@ -49,28 +62,33 @@
 
   /* Operator strip — small, for rehearsal */
   #op { position: fixed; left: 16px; right: 16px; bottom: 8px; color: var(--muted);
-        font: 12px ui-monospace, monospace; display: flex; gap: 16px; overflow: hidden;
-        white-space: nowrap; }
+        font: 12px ui-monospace, monospace; display: flex; gap: 16px; overflow: hidden; white-space: nowrap; }
   #ms { color: #3a9d5d; }
 </style>
 </head>
 <body>
 <div id="book">
-  <div id="words"></div>
-  <div id="foot"><span id="caption"></span><span id="pageNo"></span></div>
-</div>
+  <div id="title"></div>
+  <div id="art"></div>
+  <div id="caption"></div>
 
-<div id="ask">
-  <div id="card">
-    <div id="who"></div>
-    <div id="question"></div>
-    <div id="hint">Say your answer out loud!</div>
+  <div id="cast">
+    <span class="who" data-k="narrator">📖 Narrator</span>
+    <span class="who" data-k="firstPig">🐖 First Pig</span>
+    <span class="who" data-k="secondPig">🐖 Second Pig</span>
+    <span class="who" data-k="wolf">🐺 Wolf</span>
+    <span class="who" data-k="you">🐷 You</span>
   </div>
+
+  <div id="speech"></div>
+  <div id="yourTurn"></div>
+
+  <div id="bubbleRow"><span class="pig">🐷</span><div id="bubble"></div></div>
 </div>
 
-<div id="start"><button>Start reading</button></div>
+<div id="start"><button>Start the story</button></div>
 
-<div id="op"><span id="ms"></span><span id="line"></span><span id="partial"></span></div>
+<div id="op"><span id="ms"></span><span id="partial"></span></div>
 
 <script>
 const SEND_RATE = 16000;   // Ink input
@@ -79,16 +97,16 @@ let ctx, ws, queue = [], playingAt = 0, sources = [];
 // 바지인 이후 도착하는 청크를 버리기 위한 세대 번호.
 // 서버가 새 대사를 시작할 때(line) 올라간다.
 let generation = 0, mutedGeneration = -1;
-// Sonic has sent the whole line; once the queue drains, playback is over.
-let lineDone = true;
-let mode = 'reading', words = [];
+// The line now playing. Its playback report goes back once, tagged with its id.
+let lineId = null, lineDone = true, reported = true;
+let words = [];
 
 const $ = (id) => document.getElementById(id);
 
 document.querySelector('#start button').onclick = async () => {
   $('start').remove();
   ctx = new AudioContext({ sampleRate: PLAY_RATE });
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws = new WebSocket(`ws://${location.host}/ws${location.search}`);
   ws.binaryType = 'arraybuffer';
   ws.onmessage = onServerMessage;
   await startMic();
@@ -122,17 +140,23 @@ async function startMic() {
 
 // --- book --------------------------------------------------------------------
 
-function showPage(msg) {
-  $('words').replaceChildren();
-  words = msg.words.map((w) => {
+function highlight(who) {
+  document.querySelectorAll('.who').forEach((el) => el.classList.toggle('on', el.dataset.k === who));
+}
+
+function showBubble(list) {
+  $('bubble').replaceChildren();
+  words = list.map((w) => {
     const span = document.createElement('span');
     span.className = 'w';
     span.textContent = w;
-    $('words').append(span, ' ');
+    $('bubble').append(span, ' ');
     return span;
   });
-  $('pageNo').textContent = `Page ${msg.page + 1} of ${msg.total}`;
-  $('caption').textContent = '';
+  $('bubbleRow').classList.add('on');
+  $('speech').textContent = '';
+  $('yourTurn').textContent = 'Read it out loud!';
+  highlight('you');
   setProgress(0);
 }
 
@@ -145,11 +169,6 @@ function setProgress(n) {
   });
 }
 
-function setMode(m) {
-  mode = m;
-  $('ask').classList.toggle('on', m === 'asking');
-}
-
 // --- server -> speaker -----------------------------------------------------
 
 function onServerMessage(e) {
@@ -158,22 +177,26 @@ function onServerMessage(e) {
   if (msg.type === 'line') {
     // 새 대사 = 새 세대. 이전 세대의 잔여 청크는 이제 무시된다.
     generation++;
-    lineDone = false;
-    $('line').textContent = `${msg.speaker}: ${msg.line}`;
-    $('partial').textContent = '';
-    if (mode === 'asking') {
-      $('who').textContent = msg.speaker === 'pip' ? 'Pip asks' : 'Owl asks';
-      $('who').className = msg.speaker;
-      $('question').textContent = msg.line;
+    lineId = msg.id; lineDone = false; reported = false;
+    highlight(msg.speaker);
+    if ($('bubbleRow').classList.contains('on')) {
+      // While a bubble is up, the narrator's coaching shows under it.
+      $('yourTurn').textContent = msg.line;
     } else {
-      $('caption').textContent = msg.line;
+      // FREE RESPONSE shows the question only — nothing for the child to read back.
+      $('speech').textContent = msg.line;
+      $('speech').classList.toggle('question', msg.question);
+      $('yourTurn').textContent = msg.question ? '🎤 Your turn! Say your answer.' : '';
     }
+    $('partial').textContent = '';
   }
-  if (msg.type === 'page') showPage(msg);
+  if (msg.type === 'scene') { $('title').textContent = msg.title; $('art').textContent = msg.art; $('caption').textContent = msg.caption; }
+  if (msg.type === 'screen') { $('art').textContent = msg.art; $('caption').textContent = msg.caption; }
+  if (msg.type === 'read') showBubble(msg.words);
   if (msg.type === 'progress') setProgress(msg.word);
   if (msg.type === 'stuck') words[msg.word]?.classList.add('stuck');
-  if (msg.type === 'mode') setMode(msg.mode);
-  if (msg.type === 'end') { setMode('done'); $('pageNo').textContent = 'The End'; }
+  if (msg.type === 'readDone') setTimeout(() => { $('bubbleRow').classList.remove('on'); $('yourTurn').textContent = ''; }, 700);
+  if (msg.type === 'end') { highlight(null); $('yourTurn').textContent = msg.demo ? 'End of the demo' : 'The End'; }
   if (msg.type === 'partial') $('partial').textContent = msg.text;
   if (msg.type === 'latency') $('ms').textContent = `${msg.ms} ms`;
   if (msg.type === 'audio') playChunk(msg.data);
@@ -207,11 +230,14 @@ function playChunk(b64) {
   };
 }
 
-/** The server's 5-second stuck timer starts once the child can no longer hear Owl. */
+/**
+ * The server waits for this before the next line, and starts its 5-second
+ * stuck timer from it. Sent once per line.
+ */
 function reportIfPlayed() {
-  if (lineDone && sources.length === 0 && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'played' }));
-  }
+  if (reported || !lineDone || sources.length > 0 || ws.readyState !== WebSocket.OPEN) return;
+  reported = true;
+  ws.send(JSON.stringify({ type: 'played', id: lineId }));
 }
 
 function stopAudio() {
@@ -223,8 +249,8 @@ function stopAudio() {
   sources.forEach(s => { try { s.stop(); } catch {} });
   sources = [];
   playingAt = 0;
-  lineDone = true;
-  reportIfPlayed();
+  // The server already counts an interrupted line as over.
+  reported = true;
 }
 </script>
 </body>

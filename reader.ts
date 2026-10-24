@@ -1,7 +1,7 @@
 /**
- * Read-along. The child reads the page out loud and each word lights up only
+ * Read-along. The child reads a line out loud and each word lights up only
  * once Ink hears it, in order. A word that has not come after STUCK_MS is
- * read to the child by Owl, and read again until the child says it back.
+ * read to the child by the narrator, and read again until the child says it back.
  *
  * "Said right" means Ink transcribed the expected word. Ink is a transcriber,
  * not a phoneme scorer: a mispronunciation it hears as a different word (or
@@ -9,7 +9,8 @@
  * does. That is the honest limit of this check.
  */
 
-import type { Page } from "./story";
+/** One line or page for the child to read. */
+export type Page = { words: string[] };
 
 export const STUCK_MS = 5000;
 
@@ -39,6 +40,22 @@ const SOUNDS_SAME = [
   ["right", "write"],
 ];
 
+/** Ink may write out a contraction the book prints short: "I will" for "I'll". */
+const CONTRACTIONS: [RegExp, string][] = [
+  [/\bi will\b/g, "ill"],
+  [/\bi am\b/g, "im"],
+  [/\bcan not\b|\bcannot\b/g, "cant"],
+  [/\blet us\b/g, "lets"],
+  [/\bwe will\b/g, "well"],
+  [/\byou will\b/g, "youll"],
+];
+
+function heardWords(transcript: string): string[] {
+  let text = transcript.split(/\s+/).map(norm).filter(Boolean).join(" ");
+  for (const [long, short] of CONTRACTIONS) text = text.replace(long, short);
+  return text.split(" ").filter(Boolean);
+}
+
 export function sameWord(heard: string, expected: string): boolean {
   if (heard === expected) return true;
   // Ink often adds or drops a plural s on children's speech.
@@ -50,7 +67,7 @@ export class Reader {
   page = 0;
   /** Words read so far on this page; also the index of the word to say next. */
   word = 0;
-  /** The word Owl is coaching, and how many times he has said it. */
+  /** The word being coached, and how many times it has been said. */
   stuck: { word: number; tries: number } | null = null;
   lastProgressAt = performance.now();
   lastTranscript = "";
@@ -93,7 +110,7 @@ export class Reader {
    */
   feed(transcript: string): boolean {
     this.lastTranscript = transcript;
-    const heard = transcript.split(/\s+/).map(norm).filter(Boolean);
+    const heard = heardWords(transcript);
     const before = this.word;
 
     for (let i = this.used; i < heard.length && !this.pageDone; i++) {
@@ -128,7 +145,7 @@ export class Reader {
     return tries;
   }
 
-  /** The five seconds count from when Owl stops talking, not when he starts. */
+  /** The five seconds count from when the voice stops talking, not when it starts. */
   restartClock() {
     this.lastProgressAt = performance.now();
   }

@@ -425,32 +425,13 @@ export const pickFallback = (kind: keyof typeof FALLBACKS): string =>
   pick(FALLBACKS[kind]);
 
 // ---------------------------------------------------------------------------
-// Read-along. Owl's lines while the child reads the book out loud. Templated,
-// no model call — a stuck reader needs the word now, not in a second.
+// Read-along. The narrator's lines while the child reads a speech bubble out
+// loud. Templated, no model call — a stuck reader needs the word now.
 
-export const READ_INTRO =
-  "Here is our story. Read it out loud to me, and I will follow along.";
-
-/** Owl reads the stuck word and hands it back. Varies so a repeat is not a loop. */
+/** Reads the stuck word and hands it back. Varies so a repeat is not a loop. */
 export function coachLine(word: string, tries: number): string {
   const w = word.replace(/[^A-Za-z']/g, "");
   if (tries === 1) return `That word says ${w}. Now you say it: ${w}.`;
   if (tries % 2 === 0) return `Listen close. ${w}. Your turn!`;
   return `${w}. ${w}. What does this word say?`;
-}
-
-/** Spoken when a checkpoint's questions are done and the book opens again. */
-export const READ_ON = {
-  owl: ["Let's read on!", "Back to the book. Keep reading!"],
-  pip: ["Ooh! Let's read on and find out!", "Quick, read the next page!"],
-};
-
-export const pickReadOn = (speaker: "pip" | "owl"): string => pick(READ_ON[speaker]);
-
-export const THE_END =
-  "And that is the end of our story. You read every word of it yourself.";
-
-/** Owl's evaluate-and-expand without the closing question, for the last turn of a checkpoint. */
-export function dropFinalQuestion(line: string): string {
-  return line.replace(/[^.!?]*\?\s*$/, "").trim();
 }

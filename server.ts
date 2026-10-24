@@ -1,42 +1,45 @@
 /**
  * Story Quest — local server. Run with: bun run server.ts
  *
- * Browser tab holds the mic, the speaker and the book page. This process holds
- * the API keys and does Ink -> (Reader | StoryEngine) -> Sonic. Everything runs
- * on one laptop; the only traffic leaving it goes to Cartesia and Anthropic.
+ * Browser tab holds the mic, the speaker and the picture book. This process
+ * holds the API keys, walks the script in story.ts, and does Ink -> Sonic.
+ * Everything runs on one laptop; the only traffic leaving it goes to
+ * Cartesia and Anthropic.
  *
  *   browser --PCM16 16k--> server --> Ink (turns)
  *                                      |
- *                     reading mode     |      asking mode
- *              Reader.feed(partials) <-+-> StoryEngine.next() at turn.end
- *              stuck 5s -> coachLine         (CROWD + PEER, unchanged)
+ *          READ ALOUD: Reader.feed(partials), stuck 5 s -> narrator says the word
+ *          FREE RESPONSE: turn.end -> questions.ts
  *                                      |
  *                                      v
- *   browser <--PCM16 24k-- server <-- Sonic
+ *   browser <--PCM16 24k-- server <-- Sonic (four voices)
  *
- * .env:  CARTESIA_API_KEY=...  PIP_VOICE_ID=...  OWL_VOICE_ID=...
+ * .env:  CARTESIA_API_KEY=...  NARRATOR_VOICE_ID=...  FIRST_PIG_VOICE_ID=...
+ *        SECOND_PIG_VOICE_ID=...  WOLF_VOICE_ID=...  (ANTHROPIC_API_KEY=...)
+ *
+ * Open http://localhost:3000/?demo to stop where the short demo stops.
  */
 
-import { StoryEngine, type Turn } from "./engine";
 import { Reader } from "./reader";
-import { STORY } from "./story";
-import {
-  READ_INTRO,
-  THE_END,
-  coachLine,
-  dropFinalQuestion,
-  pickReadOn,
-  type State,
-} from "./prompts";
+import { SCRIPT, type Speaker } from "./story";
+import { QUESTIONS, type Talk } from "./questions";
+import { coachLine } from "./prompts";
 
 const KEY = process.env.CARTESIA_API_KEY!;
 const VERSION = "2026-03-01";
-const VOICES = {
-  pip: process.env.PIP_VOICE_ID!,
-  owl: process.env.OWL_VOICE_ID!,
+const VOICES: Record<Speaker, string> = {
+  narrator: process.env.NARRATOR_VOICE_ID!,
+  firstPig: process.env.FIRST_PIG_VOICE_ID!,
+  secondPig: process.env.SECOND_PIG_VOICE_ID!,
+  wolf: process.env.WOLF_VOICE_ID!,
 };
 
 if (!KEY) throw new Error("CARTESIA_API_KEY missing — check .env");
+const missing = Object.entries(VOICES).filter(([, id]) => !id).map(([who]) => who);
+if (missing.length) throw new Error(`Voice IDs missing for: ${missing.join(", ")} — check .env`);
+
+/** FREE RESPONSE: this long with nothing said counts as "unsure". */
+const SILENCE_MS = 8000;
 
 // ---------------------------------------------------------------------------
 
@@ -44,29 +47,32 @@ type Session = {
   browser: WebSocket;
   ink: WebSocket;
   sonic: WebSocket;
-  state: ReturnType<typeof StoryEngine.initial>;
+  demo: boolean;
+  closed: boolean;
+  /**
+   * idle: narration, the child's speech is ignored.
+   * reading: a READ ALOUD bubble is up. listening: a FREE RESPONSE is open.
+   */
+  mode: "idle" | "reading" | "listening";
   /** Set at turn.end, cleared when the first audio byte goes out. */
   turnEndedAt: number | null;
-  speaking: boolean;
   /** 현재 재생 중인 Sonic 컨텍스트. 바지인 시 버려진다. */
   contextId: string | null;
-  /** 턴 일련번호. 응답 생성 중에 새 턴이 오면 옛 응답을 버린다. */
-  turnSeq: number;
-
-  /** reading: the child reads the page. asking: a checkpoint's scenes run. */
-  mode: "reading" | "asking" | "done";
-  reader: Reader;
-  /** Scenes the current checkpoint runs through. */
-  checkpoint: State["scene"][];
-  /** Ink turns seen. The turn that finished a page is not an answer. */
-  inkTurn: number;
-  askingSinceTurn: number;
   /**
-   * True from sending a line until the browser reports playback finished.
+   * True from sending a line until the browser reports it finished playing.
    * Only the browser knows when audio stops (see HANDOFF §3).
    */
   audioPlaying: boolean;
   audioAt: number;
+  onPlayed: (() => void) | null;
+  reader: Reader | null;
+  onRead: (() => void) | null;
+  onAnswer: ((text: string | null) => void) | null;
+  waitingSince: number;
+  childTalking: boolean;
+  /** Ink turns seen. A turn still open when a bubble is finished is not an answer. */
+  inkTurn: number;
+  ignoreTurn: number;
 };
 
 const sessions = new Map<WebSocket, Session>();
@@ -82,39 +88,35 @@ function openInk(session: Session) {
 
   const ink = new WebSocket(url);
 
-  ink.onmessage = async (e) => {
+  ink.onmessage = (e) => {
     const msg = JSON.parse(e.data as string);
 
     console.log(`[ink] ${msg.type}`, msg.transcript ?? "");
 
     switch (msg.type) {
       case "turn.start":
-        // 아이가 말하기 시작했다. 재생 중인지는 브라우저만 안다 —
-        // Sonic은 대사 전체를 수백 ms 만에 보내지만 재생은 몇 초 걸리므로,
-        // 서버의 speaking 플래그로 판단하면 거의 항상 false다.
-        // 무조건 보내고, 재생 중이 아니면 브라우저가 알아서 무시한다.
-        session.contextId = null;
-        session.speaking = false;
-        // Whatever was playing is stopped or its chunks are now dropped.
-        session.audioPlaying = false;
         session.inkTurn++;
-        session.reader.startTurn();
-        send(session, { type: "stop_audio" });
+        session.childTalking = true;
+        session.reader?.startTurn();
+        // Barge-in only when it is the child's turn. Narration and the wolf
+        // play through, so a chatty child does not skip the story.
+        if (session.mode !== "idle") interrupt(session);
         break;
 
       case "turn.update":
-        // Partial transcript. In reading mode this is what lights words up
+        // Partial transcript. While reading, this is what lights words up
         // as the child says them, instead of waiting for the turn to end.
         send(session, { type: "partial", text: msg.transcript });
         if (session.mode === "reading") read(session, msg.transcript ?? "");
         break;
 
       case "turn.end":
-        if (session.mode === "reading") {
-          read(session, msg.transcript ?? "", true);
-        } else if (session.mode === "asking" && session.inkTurn > session.askingSinceTurn) {
+        session.childTalking = false;
+        if (session.inkTurn === session.ignoreTurn) break;
+        if (session.mode === "reading") read(session, msg.transcript ?? "", true);
+        else if (session.mode === "listening") {
           session.turnEndedAt = performance.now();
-          await askTurn(session, msg.transcript?.trim() || null);
+          answer(session, msg.transcript?.trim() || null);
         }
         break;
     }
@@ -144,13 +146,11 @@ function openSonic(session: Session) {
         console.log(`[latency] child stopped -> first audio: ${ms}ms`);
         send(session, { type: "latency", ms });
       }
-      session.speaking = true;
       send(session, { type: "audio", data: msg.data });
     }
 
     if (msg.type === "done") {
       if (msg.context_id !== session.contextId) return;
-      session.speaking = false;
       send(session, { type: "audio_done" });
     }
 
@@ -161,14 +161,22 @@ function openSonic(session: Session) {
   return sonic;
 }
 
-/** Shows a line in the browser and sends it to Sonic in that character's voice. */
-function speak(session: Session, speaker: "pip" | "owl", line: string) {
-  send(session, { type: "line", speaker, line });
+// ---------------------------------------------------------------------------
+// Speaking
+
+/** Speaks one line in that character's voice. Resolves when it has finished playing. */
+function say(session: Session, speaker: Speaker, line: string, question = false): Promise<void> {
+  if (session.closed) return Promise.resolve();
+  console.log(`[say] ${speaker}: ${line}`);
+
+  // Lines play one at a time; a line cut short releases whoever waited on it.
+  played(session);
 
   const contextId = crypto.randomUUID();
   session.contextId = contextId;
   session.audioPlaying = true;
   session.audioAt = performance.now();
+  send(session, { type: "line", id: contextId, speaker, line, question });
 
   session.sonic.send(
     JSON.stringify({
@@ -181,23 +189,56 @@ function speak(session: Session, speaker: "pip" | "owl", line: string) {
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 24000 },
     })
   );
+
+  return new Promise((resolve) => (session.onPlayed = resolve));
+}
+
+/** The current line is over, whether it finished or was cut off. */
+function played(session: Session) {
+  session.audioPlaying = false;
+  session.waitingSince = performance.now();
+  session.reader?.restartClock();
+  const resolve = session.onPlayed;
+  session.onPlayed = null;
+  resolve?.();
+}
+
+/** The child started talking over a line: stop it. */
+function interrupt(session: Session) {
+  // 재생 중인지는 브라우저만 안다. 무조건 보내고, 재생 중이 아니면
+  // 브라우저가 알아서 무시한다. 남은 청크는 contextId로 버린다.
+  session.contextId = null;
+  send(session, { type: "stop_audio" });
+  played(session);
 }
 
 // ---------------------------------------------------------------------------
-// Reading mode
+// READ ALOUD
 
-function showPage(session: Session) {
-  const r = session.reader;
-  send(session, { type: "mode", mode: "reading" });
-  send(session, { type: "page", page: r.page, total: STORY.length, words: r.words });
+function readAloud(session: Session, line: string): Promise<void> {
+  const reader = new Reader([{ words: line.split(/\s+/).filter(Boolean) }]);
+  session.reader = reader;
+  session.mode = "reading";
+  send(session, { type: "read", words: reader.words });
+  return new Promise((resolve) => (session.onRead = resolve));
 }
 
 function read(session: Session, transcript: string, final = false) {
   const r = session.reader;
+  if (!r) return;
 
   if (r.feed(transcript)) {
     send(session, { type: "progress", word: r.word });
-    if (r.pageDone) finishPage(session);
+    if (r.pageDone) {
+      session.mode = "idle";
+      session.reader = null;
+      // The child is still finishing the sentence; that turn is not an answer.
+      if (session.childTalking) session.ignoreTurn = session.inkTurn;
+      send(session, { type: "readDone" });
+      const resolve = session.onRead;
+      session.onRead = null;
+      resolve?.();
+    }
     return;
   }
 
@@ -206,111 +247,108 @@ function read(session: Session, transcript: string, final = false) {
   if (final && r.stuck && !session.audioPlaying) coach(session);
 }
 
-/** Owl reads the stuck word aloud. Repeats until the child says it back. */
+/** The narrator reads the stuck word. Repeats until the child says it back. */
 function coach(session: Session) {
-  const r = session.reader;
+  const r = session.reader!;
   const tries = r.coach();
   console.log(`[read] stuck on "${r.target}" (try ${tries})`);
   send(session, { type: "stuck", word: r.word });
-  speak(session, "owl", coachLine(r.target, tries));
+  say(session, "narrator", coachLine(r.target, tries));
 }
 
-function finishPage(session: Session) {
-  const ask = STORY[session.reader.page]?.ask;
-  if (ask?.length) startQuestions(session, ask);
-  else nextPage(session);
+// ---------------------------------------------------------------------------
+// FREE RESPONSE
+
+/** Asks a question and resolves with the answer, or null after SILENCE_MS. */
+async function ask(session: Session, speaker: Speaker, line: string): Promise<string | null> {
+  // Listen before speaking, so an answer that talks over the question counts.
+  const heard = new Promise<string | null>((resolve) => (session.onAnswer = resolve));
+  session.mode = "listening";
+  await say(session, speaker, line, true);
+  session.waitingSince = performance.now();
+  const text = await heard;
+  console.log(`[answer] ${JSON.stringify(text)}`);
+  return text;
 }
 
-function endStory(session: Session, lead = "") {
-  session.mode = "done";
-  send(session, { type: "end" });
-  speak(session, "owl", `${lead} ${THE_END}`.trim());
+function answer(session: Session, text: string | null) {
+  session.mode = "idle";
+  const resolve = session.onAnswer;
+  session.onAnswer = null;
+  resolve?.(text);
 }
 
-function nextPage(session: Session) {
-  const r = session.reader;
-  if (r.lastPage) return endStory(session);
-  r.nextPage();
-  session.mode = "reading";
-  showPage(session);
-  // The child may have read straight on past the last word of the old page.
-  if (r.lastTranscript) read(session, r.lastTranscript);
-}
+// ---------------------------------------------------------------------------
+// The timer: stuck words and silent answers. Counts only while no voice is
+// playing.
 
-// Stall timer. Counts only while nobody is talking to the child.
 setInterval(() => {
   const now = performance.now();
   for (const session of sessions.values()) {
-    // A line whose playback report never came back must not freeze the timer.
-    if (session.audioPlaying && now - session.audioAt > 20_000) session.audioPlaying = false;
-    if (session.mode !== "reading" || session.audioPlaying) continue;
-    if (session.reader.isStalled(now)) coach(session);
+    // A line whose playback report never came back must not freeze the story.
+    if (session.audioPlaying && now - session.audioAt > 20_000) played(session);
+    if (session.audioPlaying) continue;
+
+    if (session.mode === "reading" && session.reader?.isStalled(now)) coach(session);
+
+    if (
+      session.mode === "listening" &&
+      !session.childTalking &&
+      now - session.waitingSince > SILENCE_MS
+    ) {
+      answer(session, null);
+    }
   }
 }, 250);
 
 // ---------------------------------------------------------------------------
-// Asking mode — the existing Pip & Owl dialogue, run as a checkpoint
+// The story
 
-function startQuestions(session: Session, scenes: State["scene"][]) {
-  session.mode = "asking";
-  session.checkpoint = scenes;
-  // The turn that read the last word is still open; its turn.end is reading,
-  // not an answer.
-  session.askingSinceTurn = session.inkTurn;
-  session.reader.startTurn();
-  session.state = { ...session.state, scene: scenes[0]!, probedThisScene: false };
-  send(session, { type: "mode", mode: "asking" });
-  askTurn(session, null);
-}
+async function runStory(session: Session) {
+  const talk: Talk = {
+    say: (speaker, line) => say(session, speaker, line),
+    ask: (speaker, line) => ask(session, speaker, line),
+  };
 
-/** One child answer in, one spoken character line out. */
-async function askTurn(session: Session, childText: string | null) {
-  // 엔진 호출은 1초 넘게 걸린다. 그 사이 아이가 또 말하면 이 응답은 낡은 것이므로
-  // 버린다. 없으면 두 대사가 동시에 Sonic으로 가서 겹쳐 들린다.
-  const seq = ++session.turnSeq;
-  const last = session.checkpoint.at(-1)!;
-  const before = session.state.scene;
-
-  let turn: Turn = await StoryEngine.next(childText, session.state);
-  if (seq !== session.turnSeq) {
-    console.log(`[skip] 턴 ${seq} 폐기 — 그 사이 새 발화가 들어왔다`);
-    return;
+  for (const step of SCRIPT) {
+    if (session.closed) return;
+    switch (step.kind) {
+      case "scene":
+      case "screen":
+        send(session, step.kind === "scene" ? { type: "scene", ...step } : { type: "screen", ...step });
+        break;
+      case "say":
+        await say(session, step.speaker, step.line);
+        break;
+      case "read":
+        await readAloud(session, step.line);
+        break;
+      case "ask":
+        await QUESTIONS[step.question](talk);
+        break;
+      case "demoStop":
+        if (session.demo) {
+          send(session, { type: "end", demo: true });
+          return;
+        }
+        break;
+    }
   }
-
-  // Pip only creates the need. Once the child answers him, Owl takes that
-  // same answer for the next scene ("Bricks! Why bricks?") instead of Pip
-  // asking his question a second time.
-  if (turn.speaker === "pip" && turn.state.scene > before && turn.state.scene <= last) {
-    turn = await StoryEngine.next(childText, turn.state);
-    if (seq !== session.turnSeq) return;
-  }
-
-  session.state = turn.state;
-  console.log(`[engine] scene=${turn.state.scene} ${turn.speaker}: ${turn.line}`);
-
-  if (turn.state.scene <= last) {
-    // 질문 보장과 예/아니오 차단은 엔진 안에서 이미 적용됐다.
-    speak(session, turn.speaker, turn.line);
-    return;
-  }
-
-  // Checkpoint satisfied. Keep Owl's evaluate-and-expand, drop his next
-  // question — the book answers it.
-  const lead = turn.speaker === "owl" ? dropFinalQuestion(turn.line) : "";
-  if (session.reader.lastPage) return endStory(session, lead);
-  nextPage(session);
-  speak(session, turn.speaker, `${lead} ${pickReadOn(turn.speaker)}`.trim());
+  send(session, { type: "end", demo: false });
 }
 
 // ---------------------------------------------------------------------------
 
-Bun.serve({
+Bun.serve<{ demo: boolean }, never>({
   port: 3000,
 
   fetch(req, server) {
-    const { pathname } = new URL(req.url);
-    if (pathname === "/ws") {
-      return server.upgrade(req) ? undefined : new Response("upgrade failed", { status: 400 });
+    const url = new URL(req.url);
+    if (url.pathname === "/ws") {
+      const demo = url.searchParams.has("demo");
+      return server.upgrade(req, { data: { demo } })
+        ? undefined
+        : new Response("upgrade failed", { status: 400 });
     }
     return new Response(Bun.file("./index.html"));
   },
@@ -321,30 +359,29 @@ Bun.serve({
         browser: ws as unknown as WebSocket,
         ink: null!,
         sonic: null!,
-        state: StoryEngine.initial(),
+        demo: ws.data.demo,
+        closed: false,
+        mode: "idle",
         turnEndedAt: null,
-        speaking: false,
         contextId: null,
-        turnSeq: 0,
-        mode: "reading",
-        reader: new Reader(STORY),
-        checkpoint: [],
-        inkTurn: 0,
-        askingSinceTurn: 0,
         audioPlaying: false,
         audioAt: 0,
+        onPlayed: null,
+        reader: null,
+        onRead: null,
+        onAnswer: null,
+        waitingSince: 0,
+        childTalking: false,
+        inkTurn: 0,
+        ignoreTurn: -1,
       };
       session.ink = openInk(session);
       session.sonic = openSonic(session);
       sessions.set(ws as unknown as WebSocket, session);
 
-      // Never open on silence: Owl speaks first, then the first page opens.
       session.sonic.addEventListener(
         "open",
-        () => {
-          showPage(session);
-          speak(session, "owl", READ_INTRO);
-        },
+        () => runStory(session).catch((err) => console.error("[story]", err)),
         { once: true }
       );
     },
@@ -356,10 +393,8 @@ Bun.serve({
       // Text frames are control messages from the page.
       if (typeof data === "string") {
         const msg = JSON.parse(data);
-        if (msg.type === "played") {
-          session.audioPlaying = false;
-          session.reader.restartClock();
-        }
+        // Only the line still current counts; a late report for an older one is ignored.
+        if (msg.type === "played" && msg.id === session.contextId) played(session);
         return;
       }
 
@@ -369,6 +404,7 @@ Bun.serve({
 
     close(ws) {
       const session = sessions.get(ws as unknown as WebSocket);
+      if (session) session.closed = true;
       session?.ink.close();
       session?.sonic.close();
       sessions.delete(ws as unknown as WebSocket);
@@ -376,4 +412,4 @@ Bun.serve({
   },
 });
 
-console.log("Story Quest on http://localhost:3000");
+console.log("Story Quest on http://localhost:3000  (short demo: /?demo)");

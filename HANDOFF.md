@@ -71,15 +71,25 @@ Each cost a debugging cycle.
 
 ## 4. Design decisions — do not silently reverse
 
-**Reversed 2026-10-24: the child now reads from the screen.** The original
-decision was no child-facing screen. It was deliberately replaced with a
-read-along: the book page is shown, each word lights up only when Ink hears
-it, and a word stuck for 5 s is read aloud by Owl (`coachLine`) and repeated
-until the child says it back. `story.ts` holds the pages; `reader.ts` does the
-matching; `server.ts` switches between `reading` and `asking` mode. A page's
-`ask` field runs the existing Pip & Owl scenes as a pop-up checkpoint, and
-the story resumes when the last scene advances. "Said right" means Ink
-transcribed the expected word — it is not phoneme-level scoring.
+**Reversed 2026-10-24: the child now reads from the screen, and the story is
+a fixed script.** The original design (no child-facing screen, Pip & Owl,
+CROWD/PEER via the model) was deliberately replaced. Now:
+
+- `story.ts` is the full script, step by step: scenes, narration, READ ALOUD
+  bubbles, FREE RESPONSE questions, and a `demoStop` (open `/?demo` to stop
+  there for the short live demo).
+- Four voices: narrator, first pig, second pig, wolf. The child is the
+  youngest pig and speaks into the mic. **The first pig asks every follow-up
+  question; the second pig gives every explanation.** The wolf only has lines.
+- READ ALOUD (`reader.ts`): each word lights up only when Ink hears it; a
+  word stuck for 5 s is read aloud by the narrator and repeated until the
+  child says it back. "Said right" means Ink transcribed the expected word —
+  not phoneme-level scoring.
+- FREE RESPONSE (`questions.ts`): the script's branches are matched in code
+  and spoken from templates. Only an answer no branch covers goes to
+  `claude-haiku-5-5`, to reflect the child's own words back.
+- `engine.ts`, `mockEngine.ts` and the Owl/Pip parts of `prompts.ts` are no
+  longer used by the server.
 
 **Public domain story only.** A modern picture book would be an IP problem in
 a judged, published submission.
