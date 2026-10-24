@@ -1,21 +1,28 @@
 /**
- * 진짜 StoryEngine. mockEngine.ts와 인터페이스가 완전히 동일하므로
+ * 진짜 StoryEngine. mockEngine.ts와 인터페이스가 같으므로
  * server.ts의 import 한 줄만 바꾸면 교체된다.
  *
- *   import { StoryEngine } from "./mockEngine";  ->  "./engine"
+ * 가이드라인에 따른 구조:
+ *   Owl  — 모델 호출. PEER(평가→확장→재질문)와 CROWD 질문 생성을 맡는다.
+ *   Pip  — 템플릿. 모델을 부르지 않으므로 씬 2·4는 레이턴시가 0에 가깝다.
  *
- * .env 추가: ANTHROPIC_API_KEY=...
+ * CROWD 유형과 난이도는 코드가 정해서 프롬프트에 넣는다. 모델에게 고르게
+ * 두면 Open-ended/Wh- 쪽으로 쏠린다는 것이 연구의 지적이다.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
   OWL_SYSTEM,
-  PIP_SYSTEM,
+  answerLevel,
   buildTurnMessage,
-  parseReply,
+  crowdFor,
   ensureQuestion,
-  pickFallback,
+  extractKeyword,
   initialState,
+  parseReply,
+  pickFallback,
+  pipLine,
+  sceneSpeaker,
   type State,
 } from "./prompts";
 
@@ -28,43 +35,46 @@ export type Turn = {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-/** 씬별로 누가 말하는지. 씬 그래프와 일치해야 한다. */
-const SPEAKER: Record<number, "pip" | "owl"> = {
-  1: "owl",
-  2: "pip",
-  3: "owl",
-  4: "pip",
-  5: "owl",
-};
-
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 4500;
 
 export const StoryEngine = {
   initial: initialState,
 
   /**
-   * @param onToken 구분자(---) 앞의 텍스트를 도착하는 대로 흘려보낸다.
-   *                server.ts가 문장 단위로 Sonic에 보내고 싶을 때 쓴다.
-   *                넘기지 않으면 전체를 받은 뒤 한 번에 반환한다.
+   * @param onToken LINE: 뒤의 텍스트를 도착하는 대로 흘려보낸다.
+   *                server.ts가 문장 단위로 Sonic에 보낼 때 쓴다.
    */
   async next(
     childText: string | null,
     state: State,
     onToken?: (text: string) => void
   ): Promise<Turn> {
-    const speaker = SPEAKER[state.scene] ?? "owl";
+    const speaker = sceneSpeaker(state.scene);
+    const level = answerLevel(childText);
+    const crowd = crowdFor(state.scene, level);
 
+    // --- Pip: 모델을 부르지 않는다 -----------------------------------------
+    // 그는 상황과 정서를 담당하고, 가르치는 일은 Owl이 한다.
+    if (speaker === "pip") {
+      const advance = level !== "silent";
+      const next = applyAdvance(state, childText, advance);
+      const line = pipLine(state, childText);
+      onToken?.(line);
+      return { speaker: "pip", line, state: next, done: next.scene > 5 };
+    }
+
+    // --- Owl: PEER 한 수 ----------------------------------------------------
     try {
       const { line, advance } = await withTimeout(
-        generate(state, childText, speaker, onToken),
+        generate(state, childText, crowd, level, onToken),
         TIMEOUT_MS
       );
 
       const next = applyAdvance(state, childText, advance);
 
       return {
-        speaker,
-        line: ensureQuestion(line, state),
+        speaker: "owl",
+        line: ensureQuestion(line, state, crowd),
         state: next,
         done: next.scene > 5,
       };
@@ -73,7 +83,7 @@ export const StoryEngine = {
       console.error("[engine]", err);
       return {
         speaker: "owl",
-        line: pickFallback("misheard"),
+        line: pickFallback(level === "silent" ? "silence" : "misheard"),
         state: { ...state, probedThisScene: true },
         done: false,
       };
@@ -86,44 +96,37 @@ export const StoryEngine = {
 async function generate(
   state: State,
   childText: string | null,
-  speaker: "pip" | "owl",
+  crowd: ReturnType<typeof crowdFor>,
+  level: ReturnType<typeof answerLevel>,
   onToken?: (text: string) => void
 ): Promise<{ line: string; advance: boolean }> {
-  const stream = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 150, // 두 문장을 넘기지 못하게. 레이턴시도 같이 내려간다.
-    system: speaker === "pip" ? PIP_SYSTEM : OWL_SYSTEM,
-    messages: [{ role: "user", content: buildTurnMessage(state, childText) }],
-    stream: true,
+  // 스트리밍을 쓰지 않는다. 델타 종류(text/thinking)에 따라 본문을 통째로
+  // 놓치는 문제가 있었고, server.ts가 아직 onToken을 쓰지 않으므로
+  // 잃는 것이 없다. 문장 단위 전송은 이것이 안정된 뒤에 올린다.
+  const res = await client.messages.create({
+    model: "claude-haiku-5-5",
+    max_tokens: 400, // 넉넉히. LINE: 뒤만 읽으므로 여분 토큰은 아이에게 닿지 않는다.
+    system: OWL_SYSTEM,
+    messages: [
+      { role: "user", content: buildTurnMessage(state, childText, crowd, level) },
+    ],
   });
 
-  let raw = "";
-  let emitted = 0; // onToken으로 이미 내보낸 글자 수
+  const raw = res.content
+    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("");
 
-  for await (const event of stream) {
-    if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
-    raw += event.delta.text;
-
-    if (!onToken) continue;
-
-    // 구분자가 나타나면 그 앞까지만 흘리고 멈춘다.
-    const cut = raw.indexOf("---");
-    const speakable = cut === -1 ? raw : raw.slice(0, cut);
-
-    // 구분자가 반쯤 도착한 상태("-" 또는 "--")를 내보내지 않도록 꼬리를 남긴다.
-    const safe = cut === -1 ? speakable.slice(0, Math.max(0, speakable.length - 2)) : speakable;
-
-    if (safe.length > emitted) {
-      onToken(safe.slice(emitted));
-      emitted = safe.length;
-    }
+  if (!raw.trim()) {
+    console.log(
+      `[raw-empty] stop=${res.stop_reason} blocks=${JSON.stringify(res.content.map((b) => b.type))}`
+    );
+  } else {
+    console.log(`[raw] crowd=${crowd} level=${level} ${JSON.stringify(raw)}`);
   }
 
   const parsed = parseReply(raw);
-
-  // 꼬리로 남겨둔 글자가 있으면 마저 내보낸다.
-  if (onToken && parsed.line.length > emitted) onToken(parsed.line.slice(emitted));
-
+  onToken?.(parsed.line);
   return parsed;
 }
 
@@ -132,14 +135,16 @@ function applyAdvance(state: State, childText: string | null, advance: boolean):
   if (!advance) return { ...state, probedThisScene: true };
 
   const said = (childText ?? "").trim();
+  const keyword = extractKeyword(childText);
 
   return {
     ...state,
     scene: (state.scene + 1) as State["scene"],
     probedThisScene: false,
-    material: state.scene === 2 ? said : state.material,
-    reason: state.scene === 3 ? said : state.reason,
-    prediction: state.scene === 4 ? said : state.prediction,
+    // 아이가 고른 재료는 키워드만 뽑아 둔다. Pip의 대사 슬롯과 콜백에 쓰인다.
+    material: state.scene === 2 ? keyword ?? state.material : state.material,
+    reason: state.scene === 3 ? said || state.reason : state.reason,
+    prediction: state.scene === 4 ? said || state.prediction : state.prediction,
     events: said ? [...state.events, said] : state.events,
   };
 }

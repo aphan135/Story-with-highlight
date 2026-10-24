@@ -26,6 +26,9 @@
 const SEND_RATE = 16000;   // Ink input
 const PLAY_RATE = 24000;   // Sonic output
 let ctx, ws, queue = [], playingAt = 0, sources = [];
+// 바지인 이후 도착하는 청크를 버리기 위한 세대 번호.
+// 서버가 새 대사를 시작할 때(line) 올라간다.
+let generation = 0, mutedGeneration = -1;
 
 document.getElementById('start').onclick = async () => {
   document.getElementById('start').remove();
@@ -68,6 +71,8 @@ function onServerMessage(e) {
   const msg = JSON.parse(e.data);
 
   if (msg.type === 'line') {
+    // 새 대사 = 새 세대. 이전 세대의 잔여 청크는 이제 무시된다.
+    generation++;
     document.getElementById('line').textContent = `${msg.speaker}: ${msg.line}`;
     document.getElementById('partial').textContent = '';
   }
@@ -80,6 +85,9 @@ function onServerMessage(e) {
 
 /** Schedule each chunk back to back so playback is gapless. */
 function playChunk(b64) {
+  // 바지인으로 음소거된 세대의 청크는 버린다.
+  if (generation === mutedGeneration) return;
+
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const i16 = new Int16Array(bytes.buffer);
   const buf = ctx.createBuffer(1, i16.length, PLAY_RATE);
@@ -99,6 +107,11 @@ function playChunk(b64) {
 }
 
 function stopAudio() {
+  // 재생 중이 아니면 할 일이 없다. 여기서 세대를 음소거하면
+  // 아직 시작도 안 한 다음 대사가 통째로 버려진다.
+  if (sources.length === 0) return;
+
+  mutedGeneration = generation;
   sources.forEach(s => { try { s.stop(); } catch {} });
   sources = [];
   playingAt = 0;
