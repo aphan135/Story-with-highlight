@@ -71,10 +71,15 @@ Each cost a debugging cycle.
 
 ## 4. Design decisions — do not silently reverse
 
-**No screen for the child.** The browser tab holds the mic, the speaker and an
-operator view for rehearsal. A child-facing UI destroys the Cartesia argument.
-The system also deliberately does not track the page: scene 1 exists to make
-the child describe where they are, which is the first exercise.
+**Reversed 2026-10-24: the child now reads from the screen.** The original
+decision was no child-facing screen. It was deliberately replaced with a
+read-along: the book page is shown, each word lights up only when Ink hears
+it, and a word stuck for 5 s is read aloud by Owl (`coachLine`) and repeated
+until the child says it back. `story.ts` holds the pages; `reader.ts` does the
+matching; `server.ts` switches between `reading` and `asking` mode. A page's
+`ask` field runs the existing Pip & Owl scenes as a pop-up checkpoint, and
+the story resumes when the last scene advances. "Said right" means Ink
+transcribed the expected word — it is not phoneme-level scoring.
 
 **Public domain story only.** A modern picture book would be an IP problem in
 a judged, published submission.

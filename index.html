@@ -2,25 +2,75 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Story Quest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  body { margin: 0; height: 100vh; background: #111; color: #666;
-         font: 13px ui-monospace, monospace; display: grid; place-items: center; }
-  /* Operator view only. The child sees nothing; turn the laptop away. */
-  #op { width: min(560px, 90vw); }
-  #line { color: #ddd; font-size: 15px; margin-bottom: 12px; min-height: 3em; }
-  #partial { color: #888; font-style: italic; min-height: 1.5em; }
-  #ms { color: #4ade80; }
-  button { font: inherit; padding: 8px 16px; margin-top: 16px; }
+  :root {
+    --paper: #f7f0e1; --page: #fffdf7; --ink: #2b2620; --muted: #8a7f6e;
+    --mark: #ffe066; --stuck: #e07a5f; --owl: #6b5b95; --pip: #e88aa0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink);
+         font-family: Andika, "Comic Sans MS", system-ui, sans-serif;
+         display: grid; place-items: center; padding: 16px; }
+
+  /* The book */
+  #book { width: min(820px, 100%); background: var(--page); border-radius: 18px;
+          padding: 40px 48px 28px; box-shadow: 0 10px 30px rgba(60,40,10,.12); }
+  #words { font-size: clamp(24px, 4vw, 38px); line-height: 1.9; min-height: 6em; }
+  .w { padding: 0 3px; border-radius: 6px; transition: background .15s; }
+  .w.read { background: var(--mark); }
+  .w.current { box-shadow: inset 0 -3px 0 #d8c9a3; }
+  .w.stuck { outline: 3px dashed var(--stuck); outline-offset: 2px;
+             animation: nudge 1.2s ease-in-out infinite; }
+  @keyframes nudge { 50% { outline-color: transparent; } }
+  #foot { display: flex; justify-content: space-between; align-items: center;
+          margin-top: 18px; color: var(--muted); font-size: 18px; gap: 12px; }
+  #caption { font-style: italic; }
+
+  /* Question pop-up */
+  #ask { position: fixed; inset: 0; background: rgba(43,38,32,.35);
+         display: none; place-items: center; padding: 16px; }
+  #ask.on { display: grid; }
+  #card { width: min(640px, 100%); background: var(--page); border-radius: 22px;
+          padding: 28px 32px; box-shadow: 0 16px 40px rgba(0,0,0,.2);
+          animation: pop .25s ease-out; }
+  @keyframes pop { from { transform: scale(.9); opacity: 0; } }
+  #who { font-weight: 700; font-size: 20px; margin-bottom: 8px; }
+  #who.owl { color: var(--owl); } #who.pip { color: var(--pip); }
+  #question { font-size: clamp(22px, 3.5vw, 32px); line-height: 1.4; }
+  #hint { margin-top: 14px; color: var(--muted); font-size: 18px; }
+
+  #start { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); }
+  #start button { font: inherit; font-size: 28px; padding: 18px 36px; border: 0;
+                  border-radius: 16px; background: var(--mark); cursor: pointer; }
+
+  /* Operator strip — small, for rehearsal */
+  #op { position: fixed; left: 16px; right: 16px; bottom: 8px; color: var(--muted);
+        font: 12px ui-monospace, monospace; display: flex; gap: 16px; overflow: hidden;
+        white-space: nowrap; }
+  #ms { color: #3a9d5d; }
 </style>
 </head>
 <body>
-<div id="op">
-  <div id="line">—</div>
-  <div id="partial"></div>
-  <div id="ms"></div>
-  <button id="start">Start listening</button>
+<div id="book">
+  <div id="words"></div>
+  <div id="foot"><span id="caption"></span><span id="pageNo"></span></div>
 </div>
+
+<div id="ask">
+  <div id="card">
+    <div id="who"></div>
+    <div id="question"></div>
+    <div id="hint">Say your answer out loud!</div>
+  </div>
+</div>
+
+<div id="start"><button>Start reading</button></div>
+
+<div id="op"><span id="ms"></span><span id="line"></span><span id="partial"></span></div>
 
 <script>
 const SEND_RATE = 16000;   // Ink input
@@ -29,9 +79,14 @@ let ctx, ws, queue = [], playingAt = 0, sources = [];
 // 바지인 이후 도착하는 청크를 버리기 위한 세대 번호.
 // 서버가 새 대사를 시작할 때(line) 올라간다.
 let generation = 0, mutedGeneration = -1;
+// Sonic has sent the whole line; once the queue drains, playback is over.
+let lineDone = true;
+let mode = 'reading', words = [];
 
-document.getElementById('start').onclick = async () => {
-  document.getElementById('start').remove();
+const $ = (id) => document.getElementById(id);
+
+document.querySelector('#start button').onclick = async () => {
+  $('start').remove();
   ctx = new AudioContext({ sampleRate: PLAY_RATE });
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.binaryType = 'arraybuffer';
@@ -65,6 +120,36 @@ async function startMic() {
   node.connect(micCtx.destination);
 }
 
+// --- book --------------------------------------------------------------------
+
+function showPage(msg) {
+  $('words').replaceChildren();
+  words = msg.words.map((w) => {
+    const span = document.createElement('span');
+    span.className = 'w';
+    span.textContent = w;
+    $('words').append(span, ' ');
+    return span;
+  });
+  $('pageNo').textContent = `Page ${msg.page + 1} of ${msg.total}`;
+  $('caption').textContent = '';
+  setProgress(0);
+}
+
+/** Words before `n` were heard right; `n` is the one to read next. */
+function setProgress(n) {
+  words.forEach((span, i) => {
+    span.classList.toggle('read', i < n);
+    span.classList.toggle('current', i === n);
+    span.classList.remove('stuck');
+  });
+}
+
+function setMode(m) {
+  mode = m;
+  $('ask').classList.toggle('on', m === 'asking');
+}
+
 // --- server -> speaker -----------------------------------------------------
 
 function onServerMessage(e) {
@@ -73,14 +158,27 @@ function onServerMessage(e) {
   if (msg.type === 'line') {
     // 새 대사 = 새 세대. 이전 세대의 잔여 청크는 이제 무시된다.
     generation++;
-    document.getElementById('line').textContent = `${msg.speaker}: ${msg.line}`;
-    document.getElementById('partial').textContent = '';
+    lineDone = false;
+    $('line').textContent = `${msg.speaker}: ${msg.line}`;
+    $('partial').textContent = '';
+    if (mode === 'asking') {
+      $('who').textContent = msg.speaker === 'pip' ? 'Pip asks' : 'Owl asks';
+      $('who').className = msg.speaker;
+      $('question').textContent = msg.line;
+    } else {
+      $('caption').textContent = msg.line;
+    }
   }
-  if (msg.type === 'partial') document.getElementById('partial').textContent = msg.text;
-  if (msg.type === 'latency') document.getElementById('ms').textContent = `${msg.ms} ms`;
+  if (msg.type === 'page') showPage(msg);
+  if (msg.type === 'progress') setProgress(msg.word);
+  if (msg.type === 'stuck') words[msg.word]?.classList.add('stuck');
+  if (msg.type === 'mode') setMode(msg.mode);
+  if (msg.type === 'end') { setMode('done'); $('pageNo').textContent = 'The End'; }
+  if (msg.type === 'partial') $('partial').textContent = msg.text;
+  if (msg.type === 'latency') $('ms').textContent = `${msg.ms} ms`;
   if (msg.type === 'audio') playChunk(msg.data);
   if (msg.type === 'stop_audio') stopAudio();   // barge-in
-  if (msg.type === 'audio_done') playingAt = 0;
+  if (msg.type === 'audio_done') { playingAt = 0; lineDone = true; reportIfPlayed(); }
 }
 
 /** Schedule each chunk back to back so playback is gapless. */
@@ -103,7 +201,17 @@ function playChunk(b64) {
   node.start(playingAt);
   playingAt += buf.duration;
   sources.push(node);
-  node.onended = () => { sources = sources.filter(s => s !== node); };
+  node.onended = () => {
+    sources = sources.filter(s => s !== node);
+    reportIfPlayed();
+  };
+}
+
+/** The server's 5-second stuck timer starts once the child can no longer hear Owl. */
+function reportIfPlayed() {
+  if (lineDone && sources.length === 0 && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'played' }));
+  }
 }
 
 function stopAudio() {
@@ -115,6 +223,8 @@ function stopAudio() {
   sources.forEach(s => { try { s.stop(); } catch {} });
   sources = [];
   playingAt = 0;
+  lineDone = true;
+  reportIfPlayed();
 }
 </script>
 </body>
