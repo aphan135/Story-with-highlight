@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Story Quest</title>
+<style>
+  body { margin: 0; height: 100vh; background: #111; color: #666;
+         font: 13px ui-monospace, monospace; display: grid; place-items: center; }
+  /* Operator view only. The child sees nothing; turn the laptop away. */
+  #op { width: min(560px, 90vw); }
+  #line { color: #ddd; font-size: 15px; margin-bottom: 12px; min-height: 3em; }
+  #partial { color: #888; font-style: italic; min-height: 1.5em; }
+  #ms { color: #4ade80; }
+  button { font: inherit; padding: 8px 16px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div id="op">
+  <div id="line">—</div>
+  <div id="partial"></div>
+  <div id="ms"></div>
+  <button id="start">Start listening</button>
+</div>
+
+<script>
+const SEND_RATE = 16000;   // Ink input
+const PLAY_RATE = 24000;   // Sonic output
+let ctx, ws, queue = [], playingAt = 0, sources = [];
+
+document.getElementById('start').onclick = async () => {
+  document.getElementById('start').remove();
+  ctx = new AudioContext({ sampleRate: PLAY_RATE });
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = onServerMessage;
+  await startMic();
+};
+
+// --- mic -> PCM16 @16k -> server ------------------------------------------
+
+async function startMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+  // Separate context at the send rate so the browser does the resampling.
+  const micCtx = new AudioContext({ sampleRate: SEND_RATE });
+  const src = micCtx.createMediaStreamSource(stream);
+  const node = micCtx.createScriptProcessor(2048, 1, 1);
+
+  node.onaudioprocess = (e) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const f32 = e.inputBuffer.getChannelData(0);
+    const i16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      const s = Math.max(-1, Math.min(1, f32[i]));
+      i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    ws.send(i16.buffer);
+  };
+
+  src.connect(node);
+  node.connect(micCtx.destination);
+}
+
+// --- server -> speaker -----------------------------------------------------
+
+function onServerMessage(e) {
+  const msg = JSON.parse(e.data);
+
+  if (msg.type === 'line') {
+    document.getElementById('line').textContent = `${msg.speaker}: ${msg.line}`;
+    document.getElementById('partial').textContent = '';
+  }
+  if (msg.type === 'partial') document.getElementById('partial').textContent = msg.text;
+  if (msg.type === 'latency') document.getElementById('ms').textContent = `${msg.ms} ms`;
+  if (msg.type === 'audio') playChunk(msg.data);
+  if (msg.type === 'stop_audio') stopAudio();   // barge-in
+  if (msg.type === 'audio_done') playingAt = 0;
+}
+
+/** Schedule each chunk back to back so playback is gapless. */
+function playChunk(b64) {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const i16 = new Int16Array(bytes.buffer);
+  const buf = ctx.createBuffer(1, i16.length, PLAY_RATE);
+  const out = buf.getChannelData(0);
+  for (let i = 0; i < i16.length; i++) out[i] = i16[i] / 0x8000;
+
+  const node = ctx.createBufferSource();
+  node.buffer = buf;
+  node.connect(ctx.destination);
+
+  const now = ctx.currentTime;
+  playingAt = Math.max(playingAt, now);
+  node.start(playingAt);
+  playingAt += buf.duration;
+  sources.push(node);
+  node.onended = () => { sources = sources.filter(s => s !== node); };
+}
+
+function stopAudio() {
+  sources.forEach(s => { try { s.stop(); } catch {} });
+  sources = [];
+  playingAt = 0;
+}
+</script>
+</body>
+</html>
