@@ -39,9 +39,15 @@ touches a keyboard, and on the bookshelf they open a book by saying its name.
   the interruption lands before the child has finished saying it.
 
 **Sonic 3.5** — text-to-speech over a WebSocket, streamed back as raw PCM:
-- **Five voices** from one API key — narrator, two pigs, the wolf, Foxy.
+- **Five voices** from one API key — narrator, two pigs, the wolf, Foxy. The
+  narrator, the wolf and Foxy are Cartesia library voices.
+- **Instant voice cloning for the two pigs.** The pigs are the child's older
+  brothers, and an adult doing a pig voice sounds like an adult doing a pig
+  voice. We cloned them from royalty-free child-voice samples (Pixabay), which
+  is the one thing in this build a library voice could not have given us.
 - **`generation_config` per speaker.** The narrator reads at `speed: 0.65` so a
-  child can follow; the pigs at `0.8` and `volume: 2.0` so small voices carry.
+  child can follow; the cloned pigs get `volume: 2.0`, because a small voice
+  recorded quietly does not carry against a narrator.
 - **`context_id` abandonment** is how barge-in works. When the child speaks, we
   stop the context mid-line and the browser drops everything still queued.
 - **`continue` with `max_buffer_delay_ms: 0`** streams Foxy's answer sentence by
@@ -143,8 +149,11 @@ The server and the web app are deployed separately:
 - **Network dependent.** Both APIs are remote; there is no offline mode.
 - **It cannot see the book.** If the child describes the page wrong, the story
   goes along with it.
-- **Shared voices.** The pig voices are clones on one team member's Cartesia
-  account; another key needs its own voice IDs in `.env`.
+- **Shared voices.** The pig voices are instant clones living on one team
+  member's Cartesia account; another key needs its own voice IDs in `.env`.
+- **Demo voice casting.** The cloned pig voices come from royalty-free Pixabay
+  samples, which is fine for a hackathon build. A product shipped to families
+  would cast and contract child voice talent, with consent on the record.
 
 ## More docs
 

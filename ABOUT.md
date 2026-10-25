@@ -207,6 +207,11 @@ handling is deliberately boring:
   child is and has no way to find out.
 - **Content is filtered before it reaches the child**, and the characters are
   constrained to the story — they will not discuss anything else.
+- **The voices are accounted for.** Three are Cartesia's own. The two pigs are
+  instant clones of royalty-free child-voice samples from Pixabay — no real
+  child was recorded for this, and no one's voice was cloned without a licence
+  to use it. A shipped product would contract voice talent with consent on the
+  record.
 - **The adult is not removed.** This is built to be used near a parent, not
   instead of one, and the best version of this is a child who then goes and tells
   someone what happened in their book.
