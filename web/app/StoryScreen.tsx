@@ -25,6 +25,7 @@ type Props = {
   narration: string;
   line: Line | null;
   reading: Reading | null;
+  partial: string;
   error: string | null;
   onRestart(): void;
   onExit(): void;
@@ -53,7 +54,7 @@ const SPOT = { firstPig: s.left, secondPig: s.center, wolf: s.left } as const;
 // In these pictures the wolf stands mid-frame, at the door, so his tail points from the centre.
 const WOLF_CENTRE = new Set(["wolf-knocks", "wolf-blows"]);
 
-export default function StoryScreen({ status, scene, image, narration, line, reading, error, onRestart, onExit }: Props) {
+export default function StoryScreen({ status, scene, image, narration, line, reading, partial, error, onRestart, onExit }: Props) {
   const art = (image && Object.hasOwn(ART, image) ? ART[image] : undefined)
     ?? { src: scene === null ? opening : conversation, full: false };
   const listening = status === "listening" || status === "reading";
@@ -83,6 +84,9 @@ export default function StoryScreen({ status, scene, image, narration, line, rea
           <Tail />
         </p>
       ) : null}
+
+      {/* Always mounted: screen readers skip live regions inserted already filled. */}
+      <p className={`${s.abs} ${s.subtitle}`} aria-live="polite">{partial}</p>
 
       <div className={`${s.abs} ${s.textBar}`} role="status">
         <p className={s.storyText}>

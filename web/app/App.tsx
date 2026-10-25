@@ -48,6 +48,7 @@ export default function App() {
           narration={story.narration}
           line={story.line}
           reading={story.reading}
+          partial={story.partial}
           error={story.error}
           onRestart={story.start}
           onExit={exitStory}

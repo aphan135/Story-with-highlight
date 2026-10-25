@@ -56,12 +56,13 @@ export function useStory() {
       case "readDone":
         live.current.reading = false;
         setReading(r => r && { ...r, progress: r.words.length, stuck: null });
+        setPartial("");
         // Leave the finished line up for a beat, as ../index.html does.
         setTimeout(() => setReading(null), 700);
         break;
       case "partial": live.current.partial = msg.text; setPartial(msg.text); break;
       case "latency": setLatencyMs(msg.ms); break;
-      case "end": setStatus("done"); break;
+      case "end": setStatus("done"); setPartial(""); break;
     }
   }
 

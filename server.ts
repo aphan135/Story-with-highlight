@@ -46,8 +46,8 @@ const SPEED: Record<Speaker, number> = {
  */
 const VOLUME: Record<Speaker, number> = {
   narrator: 1.0,
-  firstPig: 1.6,
-  secondPig: 1.6,
+  firstPig: 2.0,
+  secondPig: 2.0,
   wolf: 1.0,
 };
 
@@ -189,7 +189,7 @@ function openSonic(session: Session) {
 
       // 보이스 ID가 틀리면 그 대사가 통째로 사라진다. 데모 중에 캐릭터가
       // 말없이 넘어가느니 내레이터 목소리로라도 들려주는 편이 낫다.
-      if (msg.context_id === session.contextId && !session.retrying && session.lastLine) {
+      if (session.contextId && msg.context_id === session.contextId && !session.retrying && session.lastLine) {
         session.retrying = true;
         console.log("[sonic] 내레이터 목소리로 다시 시도");
         sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator, VOLUME.narrator);

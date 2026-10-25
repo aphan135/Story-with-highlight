@@ -116,6 +116,13 @@ button.cover:hover { transform: scale(1.04); }
   display: flex; align-items: center; gap: calc(24 * var(--u));
   padding: 0 calc(84.44 * var(--u));
 }
+.subtitle {
+  left: calc(84.44 * var(--u)); right: calc(84.44 * var(--u)); bottom: calc(108 * var(--u)); margin: 0;
+  padding: calc(6 * var(--u)) calc(12 * var(--u));
+  background: var(--sq-paper); text-align: center;
+  font: 400 calc(20 * var(--u))/1.25 var(--font-body), sans-serif;
+}
+.subtitle:empty { padding: 0; background: none; }
 .storyText { flex: 1; margin: 0; font: 800 calc(30.406 * var(--u))/1.2 var(--font-body), sans-serif; }
 .textBar .wave { height: calc(48 * var(--u)); }
 .barButton { height: calc(56 * var(--u)); padding-inline: calc(28 * var(--u)); font-size: calc(20 * var(--u)); white-space: nowrap; }
