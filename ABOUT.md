@@ -1,4 +1,4 @@
-# Story Quest
+# TaleTail
 
 **A voice-only companion that turns a child's one-word answers into explained thinking.**
 

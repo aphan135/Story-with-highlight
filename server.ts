@@ -1,5 +1,5 @@
 /**
- * Story Quest — local server. Run with: bun run server.ts
+ * TaleTail — local server. Run with: bun run server.ts
  *
  * Browser tab holds the mic, the speaker and the picture book. This process
  * holds the API keys, walks the script in story.ts, and does Ink -> Sonic.
@@ -744,4 +744,4 @@ Bun.serve<{ demo: boolean; pick: boolean }, never>({
   },
 });
 
-console.log(`Story Quest on http://localhost:${process.env.PORT || 3000}  (short demo: /?demo)`);
+console.log(`TaleTail on http://localhost:${process.env.PORT || 3000}  (short demo: /?demo)`);

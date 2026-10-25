@@ -1,5 +1,5 @@
 /**
- * Story Quest — dialogue generation.
+ * TaleTail — dialogue generation.
  *
  * Built against the Pip & Owl Dialogue Generation Guide:
  *  - CROWD question types are assigned in CODE, never chosen freely by the

@@ -1,4 +1,4 @@
-# Handoff — Story Quest
+# Handoff — TaleTail
 
 **For an AI assistant or teammate picking this up cold.** Read this first,
 then `ABOUT.md` for the why. Last updated 2026-10-24 11:25 PDT, Cal Hacks 13.0.
