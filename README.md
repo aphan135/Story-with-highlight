@@ -2,7 +2,8 @@
 
 **Small voice. Big adventure.** A read-along picture book in which the child reads part of the story out loud and talks with the characters.
 
-Built at Cal Hacks 13.0 for the Cartesia track.
+Built at Cal Hacks 13.0 for the Cartesia track by Ahn Yeseo, Lee Jaeyun,
+Aaron Cao and Aaron Phan.
 
 **Deployed on:** https://story-with-highlight.vercel.app/
 
@@ -13,7 +14,7 @@ The child plays the youngest of the Three Little Pigs. A narrator and three char
 | Piece | What it does |
 |---|---|
 | **Cartesia Ink** (speech-to-text) | Hears the child, streaming 16 kHz PCM over a WebSocket |
-| **Cartesia Sonic** (text-to-speech) | Speaks four voices: narrator, first pig, second pig and wolf, plus an optional voice for Foxy. Each is given its own speed and volume. |
+| **Cartesia Sonic** (text-to-speech) | Five voices, each at its own speed and volume: narrator, wolf and Foxy from the library, and the two pigs as instant voice clones so the brothers sound like children |
 | **Claude** (`@anthropic-ai/sdk`) | Replies to free answers that the templates don't cover, and answers Foxy questions. It has a short timeout and a scripted fallback. |
 | `server.ts` | Bun server that runs the script, holds the mic and audio session, and handles stuck-word coaching and barge-in |
 | `web/` | Next.js app built from the TaleTail Figma: the illustrated pages, speech bubbles and word highlighting |
@@ -27,8 +28,10 @@ The child plays the youngest of the Three Little Pigs. A narrator and three char
 
 ## What we use from Cartesia
 
-Voice is not a wrapper around this app; it is the only way in. The child never
-touches a keyboard, and on the bookshelf they open a book by saying its name.
+A grown-up sets up the microphone by touch. After that the child never types
+anything: they open a book by saying its name, read their lines out loud, answer
+the pigs in their own words, and interrupt whenever they like. Voice is the
+interface, not a feature bolted onto one.
 
 **Ink 2** — speech-to-text over a WebSocket, 16 kHz PCM:
 - **Semantic turn detection.** Ink decides when the child has finished a
@@ -137,6 +140,12 @@ The server and the web app are deployed separately:
   `export BUN_INSTALL="$HOME/.bun"; export PATH="$BUN_INSTALL/bin:$PATH"`
 - **No audio, and the story can't hear you**: check your Cartesia credits. A `402 quota_exceeded` response stops both speech and listening.
 - **A word won't light up**: restart `bun run server.ts` after any change to `reader.ts`, and use headphones.
+- **`EADDRINUSE` on port 3000 or 3001**: an earlier run is still alive. Kill it
+  and start again — `pkill bun`, or on Windows
+  `Get-Process bun | Stop-Process -Force`.
+- **The microphone never turns on**: open the app in Chrome. An embedded
+  preview pane, such as VS Code's Simple Browser, has no microphone access. Keep
+  one tab open; each tab is a separate story session.
 
 ## Known limitations
 
