@@ -67,6 +67,15 @@
 .body { font: 400 calc(22.805 * var(--u))/1.25 var(--font-body), sans-serif; }
 .bodyStrong { font: 700 calc(21.719 * var(--u))/1.25 var(--font-body), sans-serif; }
 .foot { font: 400 calc(19.547 * var(--u))/1.25 var(--font-body), sans-serif; }
+/* Privacy notice on the microphone screen: a paper card, compact enough to fit the column. */
+.notice {
+  display: flex; flex-direction: column; gap: calc(8 * var(--u));
+  padding: calc(16 * var(--u)) calc(20 * var(--u)); border-radius: calc(20 * var(--u));
+  background: var(--sq-paper);
+  font: 400 calc(17.375 * var(--u))/1.25 var(--font-body), sans-serif;
+}
+.notice > * { margin: 0; }
+.notice h2 { font: 700 calc(19.547 * var(--u))/1.25 var(--font-body), sans-serif; }
 
 /* Five bars; the mic level (0..1, set from JS as --level) stretches them. */
 .wave { display: flex; align-items: center; gap: calc(9.773 * var(--u)); height: calc(65.156 * var(--u)); --level: 0; }

@@ -46,7 +46,11 @@ export function VoiceSetup({ onEnable, onBack, busy }: { onEnable(): void; onBac
     <SetupFrame onBack={onBack}>
       <p className={s.eyebrow}>With a grown-up</p>
       <h1 className={s.title}>Let’s get<br />ready to talk.</h1>
-      <p className={s.body}>Your child’s voice brings the story to life. The app uses the microphone to hear their words and respond.</p>
+      <section className={s.notice} aria-labelledby="before-we-begin">
+        <h2 id="before-we-begin">Before we begin</h2>
+        <p>TaleTail uses the microphone to hear your child and respond. Audio is sent to Cartesia for speech recognition; some recognized text is sent to Anthropic to generate replies.</p>
+        <p>Please avoid sharing names, addresses, schools, or other personal details. A grown-up should stay nearby.</p>
+      </section>
       <p className={s.bodyStrong}>You can speak naturally — even while a character is talking.</p>
       <button className={s.primary} onClick={onEnable} disabled={busy}>
         {busy ? "Waiting for permission…" : "Enable microphone"}
