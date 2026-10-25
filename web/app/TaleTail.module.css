@@ -107,6 +107,8 @@ button.cover:hover { transform: scale(1.04); }
 
 .scene { left: 0; top: calc(-112.2 * var(--u)); width: 100%; height: calc(895.5 * var(--u)); }
 .scene img { object-fit: cover; }
+.sceneFull { left: 0; top: 0; width: 100%; height: 100%; }
+.sceneFull img { object-fit: cover; }
 .storyLogo { left: calc(71.41 * var(--u)); top: calc(23.89 * var(--u)); margin: 0; font: 800 calc(22.805 * var(--u))/1.2 var(--font-body), sans-serif; }
 .textBar {
   left: 0; top: calc(738.44 * var(--u)); width: 100%; height: calc(95.563 * var(--u));

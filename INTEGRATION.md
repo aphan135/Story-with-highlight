@@ -40,9 +40,15 @@ If you change or add a message in `server.ts`, mirror it in
 
 ## If you work on the story (`story.ts`, `questions.ts`, `reader.ts`)
 
-- **Scene art** is chosen by scene title in `ART` in `web/app/StoryScreen.tsx`
-  ("A House of Your Own", "Two Houses Fall", "Your Building Idea"). Renaming a
-  scene means updating that map; new scenes fall back to the conversation art.
+- **Scene art** is chosen by the optional `image` id on `scene(...)`/`screen(...)`
+  steps in `story.ts`: `opening`, `houses-fall`, `conversation`, `bricks`,
+  `house-built`, `wolf-knocks`, `wolf-blows`, `wolf-leaves`, `why-standing`,
+  `retell`, `ending`. For a new picture, add the PNG to `web/public/figma`, add
+  its id to `ART` in `web/app/StoryScreen.tsx`, and put the id on the step where
+  it should appear. A `screen` without an id keeps the current picture; a
+  `scene` without one falls back to the conversation art. Put the picture's
+  step *before* the line it should play under: a `screen` right before the
+  next `scene` only flashes, because nothing waits between them.
 - **Speakers → bubbles**: `firstPig` speaks from the eldest pig (left),
   `secondPig` from the middle pig (centre), `wolf` from the left; `narrator`
   lines go in the text bar. New speakers need a spot in `SPOT`.

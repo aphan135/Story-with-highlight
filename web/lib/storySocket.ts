@@ -11,8 +11,8 @@
 export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf";
 
 export type ServerMessage =
-  | { type: "scene"; title: string; art: string; caption: string }
-  | { type: "screen"; art: string; caption: string }
+  | { type: "scene"; title: string; art: string; caption: string; image?: string }
+  | { type: "screen"; art: string; caption: string; image?: string }
   | { type: "line"; id: string; speaker: Speaker; line: string; question: boolean }
   | { type: "read"; words: string[] }
   | { type: "progress"; word: number }

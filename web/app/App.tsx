@@ -44,6 +44,7 @@ export default function App() {
         <StoryScreen
           status={story.status}
           scene={story.scene}
+          image={story.image}
           narration={story.narration}
           line={story.line}
           reading={story.reading}

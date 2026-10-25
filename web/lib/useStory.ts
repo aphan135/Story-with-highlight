@@ -14,6 +14,7 @@ export type TranscriptEntry = { who: Speaker | "child"; text: string };
 export function useStory() {
   const [status, setStatus] = useState<Status>("idle");
   const [scene, setScene] = useState<string | null>(null);
+  const [image, setImage] = useState<string | null>(null);
   const [narration, setNarration] = useState("");
   const [line, setLine] = useState<Line | null>(null);
   const [reading, setReading] = useState<Reading | null>(null);
@@ -29,7 +30,8 @@ export function useStory() {
 
   function onMessage(msg: ServerMessage) {
     switch (msg.type) {
-      case "scene": setScene(msg.title); break;
+      case "scene": setScene(msg.title); setImage(msg.image ?? null); break;
+      case "screen": if (msg.image) setImage(msg.image); break;
       case "line": {
         live.current.question = msg.question;
         // The server sends only partials, so the last one before the next line
@@ -75,6 +77,7 @@ export function useStory() {
     conn.current?.close();
     live.current = { question: false, reading: false, partial: "" };
     setScene(null); setNarration(""); setLine(null); setReading(null);
+    setImage(null);
     setPartial(""); setLatencyMs(null); setTranscript([]); setError(null);
     setStatus("connecting");
     conn.current = connectStory({
@@ -96,5 +99,5 @@ export function useStory() {
     setStatus("idle");
   }
 
-  return { status, scene, narration, line, reading, partial, latencyMs, transcript, error, start, stop };
+  return { status, scene, image, narration, line, reading, partial, latencyMs, transcript, error, start, stop };
 }
