@@ -116,13 +116,6 @@ button.cover:hover { transform: scale(1.04); }
   display: flex; align-items: center; gap: calc(24 * var(--u));
   padding: 0 calc(84.44 * var(--u));
 }
-.subtitle {
-  left: calc(84.44 * var(--u)); right: calc(84.44 * var(--u)); bottom: calc(108 * var(--u)); margin: 0;
-  padding: calc(6 * var(--u)) calc(12 * var(--u));
-  background: var(--sq-paper); text-align: center;
-  font: 400 calc(20 * var(--u))/1.25 var(--font-body), sans-serif;
-}
-.subtitle:empty { padding: 0; background: none; }
 .storyText { flex: 1; margin: 0; font: 800 calc(30.406 * var(--u))/1.2 var(--font-body), sans-serif; }
 .textBar .wave { height: calc(48 * var(--u)); }
 .barButton { height: calc(56 * var(--u)); padding-inline: calc(28 * var(--u)); font-size: calc(20 * var(--u)); white-space: nowrap; }
@@ -146,6 +139,19 @@ button.cover:hover { transform: scale(1.04); }
 .left { left: calc(93.13 * var(--u)); top: calc(58.64 * var(--u)); width: calc(600.523 * var(--u)); }
 .left .tail { left: calc(165.3 * var(--u)); }
 .reading { outline: calc(5 * var(--u)) solid var(--sq-fox); }
+
+/* A character's question with the child's spoken answer under it. The spot
+   class (.left/.center) positions the pair; the gap leaves room for the tail. */
+.chat { position: absolute; display: flex; flex-direction: column; gap: calc(40 * var(--u)); }
+.chat .bubble { position: relative; }
+.reply {
+  align-self: flex-end; max-width: 80%; margin: 0;
+  padding: calc(16 * var(--u)) calc(24 * var(--u)); border-radius: calc(24 * var(--u));
+  background: var(--sq-mark);
+  font: 700 calc(26 * var(--u))/1.25 var(--font-body), sans-serif;
+  animation: pop .25s ease-out;
+}
+.reply:empty { display: none; }
 
 /* The picture blurs while Foxy is up. The scale hides the soft edges the blur leaves. */
 .scene, .sceneFull { transition: filter .3s ease, transform .3s ease; }
@@ -173,7 +179,7 @@ button.cover:hover { transform: scale(1.04); }
 
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .bubble, .foxPop { animation: none; }
+  .bubble, .foxPop, .reply { animation: none; }
   .wave i, .scene, .sceneFull { transition: none; }
   button.cover { transition: none; }
 }

@@ -21,12 +21,13 @@ export function useStory() {
   const [foxy, setFoxy] = useState(false);
   const [foxyLine, setFoxyLine] = useState("");
   const [partial, setPartial] = useState("");
+  const [answer, setAnswer] = useState("");
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const conn = useRef<ReturnType<typeof connectStory> | null>(null);
   // Read inside socket callbacks, which outlive any one render.
-  const live = useRef({ question: false, reading: false, partial: "" });
+  const live = useRef({ question: false, reading: false, partial: "", lineId: "" });
 
   useEffect(() => () => conn.current?.close(), []);
 
@@ -36,6 +37,8 @@ export function useStory() {
       case "screen": if (msg.image) setImage(msg.image); break;
       case "foxy": setFoxy(msg.on); setFoxyLine(""); break;
       case "line": {
+        live.current.lineId = msg.id;
+        const asked = live.current.question;
         live.current.question = msg.speaker === "foxy" ? false : msg.question;
         // The server sends only partials, so the last one before the next line
         // is the child's turn as heard.
@@ -47,11 +50,18 @@ export function useStory() {
           setFoxyLine(msg.line);
           return;
         }
+        // The child's answer stays up under the line that responds to it.
+        setAnswer(asked ? child : "");
         setLine({ speaker: msg.speaker, text: msg.line, question: msg.question });
         if (msg.speaker === "narrator") setNarration(msg.line);
         if (!live.current.reading) setStatus("speaking");
         break;
       }
+      case "lineMore":
+        if (msg.id !== live.current.lineId) break;
+        setFoxyLine(text => `${text} ${msg.text}`);
+        setTranscript(t => t.map((entry, i) => i === t.length - 1 ? { ...entry, text: `${entry.text} ${msg.text}` } : entry));
+        break;
       case "read":
         live.current.reading = true;
         setReading({ words: msg.words, progress: 0, stuck: null });
@@ -83,9 +93,9 @@ export function useStory() {
 
   function start() {
     conn.current?.close();
-    live.current = { question: false, reading: false, partial: "" };
+    live.current = { question: false, reading: false, partial: "", lineId: "" };
     setScene(null); setNarration(""); setLine(null); setReading(null);
-    setFoxy(false); setFoxyLine("");
+    setFoxy(false); setFoxyLine(""); setAnswer("");
     setImage(null);
     setPartial(""); setLatencyMs(null); setTranscript([]); setError(null);
     setStatus("connecting");
@@ -108,5 +118,5 @@ export function useStory() {
     setStatus("idle");
   }
 
-  return { status, scene, image, narration, line, reading, foxy, foxyLine, partial, latencyMs, transcript, error, start, stop };
+  return { status, scene, image, narration, line, reading, foxy, foxyLine, partial, answer, latencyMs, transcript, error, start, stop };
 }

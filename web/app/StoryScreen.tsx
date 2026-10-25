@@ -28,6 +28,8 @@ type Props = {
   foxy: boolean;
   foxyLine: string;
   partial: string;
+  /** The child's last answer, kept up under the reply to it. */
+  answer: string;
   error: string | null;
   onRestart(): void;
   onExit(): void;
@@ -56,7 +58,7 @@ const SPOT = { firstPig: s.left, secondPig: s.center, wolf: s.left } as const;
 // In these pictures the wolf stands mid-frame, at the door, so his tail points from the centre.
 const WOLF_CENTRE = new Set(["wolf-knocks", "wolf-blows"]);
 
-export default function StoryScreen({ status, scene, image, narration, line, reading, foxy, foxyLine, partial, error, onRestart, onExit }: Props) {
+export default function StoryScreen({ status, scene, image, narration, line, reading, foxy, foxyLine, partial, answer, error, onRestart, onExit }: Props) {
   const art = (image && Object.hasOwn(ART, image) ? ART[image] : undefined)
     ?? { src: scene === null ? opening : conversation, full: false };
   const listening = !foxy && (status === "listening" || status === "reading");
@@ -92,14 +94,16 @@ export default function StoryScreen({ status, scene, image, narration, line, rea
           <Tail />
         </p>
       ) : spoken && spoken.speaker !== "narrator" && spoken.speaker !== "foxy" ? (
-        <p className={`${s.bubble} ${spoken.speaker === "wolf" && image && WOLF_CENTRE.has(image) ? s.center : SPOT[spoken.speaker]}`}>
-          {spoken.text}
-          <Tail />
-        </p>
+        // The child's answer appears as a reply under the question, chat style.
+        <div className={`${s.chat} ${spoken.speaker === "wolf" && image && WOLF_CENTRE.has(image) ? s.center : SPOT[spoken.speaker]}`}>
+          <p className={s.bubble}>
+            {spoken.text}
+            <Tail />
+          </p>
+          {/* Mounted with the bubble: screen readers skip live regions inserted already filled. */}
+          <p className={s.reply} aria-live="polite">{(spoken.question && partial) || answer}</p>
+        </div>
       ) : null}
-
-      {/* Always mounted: screen readers skip live regions inserted already filled. */}
-      <p className={`${s.abs} ${s.subtitle}`} aria-live="polite">{partial}</p>
 
       <div className={`${s.abs} ${s.textBar}`} role="status">
         <p className={s.storyText}>

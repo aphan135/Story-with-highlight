@@ -26,6 +26,7 @@ import { SCRIPT, type Speaker } from "./story";
 import { QUESTIONS, type Talk } from "./questions";
 import { coachLine } from "./prompts";
 import { WAKE, DONE, afterWake, askFoxy } from "./foxy";
+import { screenInput } from "./story-engine/safety";
 
 const KEY = process.env.CARTESIA_API_KEY!;
 const VERSION = "2026-03-01";
@@ -108,6 +109,7 @@ type Session = {
    * Only the browser knows when audio stops (see HANDOFF §3).
    */
   audioPlaying: boolean;
+  audioStreaming?: boolean;
   audioAt: number;
   onPlayed: (() => void) | null;
   reader: Reader | null;
@@ -226,7 +228,7 @@ function openSonic(session: Session) {
       if (session.contextId && msg.context_id === session.contextId && !session.retrying && session.lastLine) {
         session.retrying = true;
         console.log("[sonic] 내레이터 목소리로 다시 시도");
-        sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator, VOLUME.narrator);
+        sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator, VOLUME.narrator, session.audioStreaming ? true : undefined);
         return;
       }
 
@@ -260,7 +262,7 @@ async function say(session: Session, speaker: Speaker, line: string, question = 
 }
 
 /** Resolves with the utterance id after playback, including an interrupted line. */
-function speak(session: Session, speaker: Speaker, line: string, question = false): Promise<string | null> {
+function speak(session: Session, speaker: Speaker, line: string, question = false, streaming = false): Promise<string | null> {
   if (session.closed) return Promise.resolve(null);
   console.log(`[say] ${speaker}: ${line}`);
 
@@ -270,14 +272,43 @@ function speak(session: Session, speaker: Speaker, line: string, question = fals
   const contextId = crypto.randomUUID();
   session.contextId = contextId;
   session.audioPlaying = true;
+  session.audioStreaming = streaming;
   session.audioAt = performance.now();
   send(session, { type: "line", id: contextId, speaker, line, question });
 
   session.lastLine = line;
   session.retrying = false;
-  sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker], VOLUME[speaker]);
+  sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker], VOLUME[speaker], streaming ? true : undefined);
 
   return new Promise((resolve) => (session.onPlayed = () => resolve(contextId)));
+}
+
+/** One utterance, with whole sentences appended as they arrive. */
+function speakStream(session: Session, speaker: Speaker, line: string) {
+  const played = speak(session, speaker, line, false, true);
+  const id = session.contextId!;
+  let ended = false;
+  const active = () => !ended && !session.closed && session.contextId === id;
+  const chunk = (text: string, more: boolean) => {
+    const voice = session.retrying ? "narrator" : speaker;
+    sendToSonic(session, VOICES[voice], text, id, SPEED[voice], VOLUME[voice], more);
+  };
+  return {
+    id, played,
+    push(text: string) {
+      if (!active()) return;
+      session.audioAt = performance.now();
+      session.lastLine += ` ${text}`;
+      send(session, { type: "lineMore", id, text });
+      chunk(` ${text}`, true);
+    },
+    end() {
+      if (!active()) return;
+      ended = true;
+      session.audioStreaming = false;
+      chunk("", false);
+    },
+  };
 }
 
 function sendToSonic(
@@ -286,7 +317,8 @@ function sendToSonic(
   line: string,
   contextId: string,
   speed: number,
-  volume: number
+  volume: number,
+  more?: boolean
 ) {
   session.sonic.send(
     JSON.stringify({
@@ -296,7 +328,8 @@ function sendToSonic(
       language: "en",
       generation_config: { speed, volume },
       context_id: contextId,
-      continue: false, // last chunk for this context — lowest latency
+      continue: more ?? false,
+      ...(more !== undefined ? { max_buffer_delay_ms: 0 } : {}),
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 24000 },
     })
   );
@@ -347,6 +380,9 @@ function startFoxy(session: Session) {
   send(session, { type: "foxy", on: true });
 }
 
+const FILLERS = ["Hmm, good question!", "Ooh, let me think.", "Hmm, let's see."];
+let filler = 0;
+
 async function foxyAnswer(session: Session, text: string) {
   const turn = session.inkTurn;
   const question = session.foxyWakeTurn === turn ? afterWake(text) : text.trim();
@@ -356,10 +392,28 @@ async function foxyAnswer(session: Session, text: string) {
   session.foxyNudged = false;
   session.turnEndedAt = performance.now();
   const history = [...session.foxyHistory];
-  const line = question ? await askFoxy(history, session.storySoFar, question) : "Hi! What's your question?";
-  if (session.closed || session.mode !== "foxy" || session.foxyThinking !== turn) return;
-  session.foxyHistory = history;
-  await speak(session, "foxy", line);
+  const stale = () => session.closed || session.mode !== "foxy" || session.foxyThinking !== turn;
+  const { kind } = screenInput(question);
+  if (!question || kind === "distress" || kind === "personal") {
+    // Greetings and fixed safety replies need no filler or model call.
+    const line = question ? await askFoxy(history, session.storySoFar, question) : "Hi! What's your question?";
+    if (stale()) return;
+    await speak(session, "foxy", line);
+  } else {
+    if (stale()) return;
+    const speech = speakStream(session, "foxy", FILLERS[filler++ % FILLERS.length]!);
+    const cancelled = () => stale() || session.contextId !== speech.id;
+    try {
+      await askFoxy(history, session.storySoFar, question, text => {
+        if (!cancelled()) speech.push(text);
+      }, cancelled);
+    } finally {
+      speech.end();
+    }
+    if (cancelled()) return;
+    session.foxyHistory = history;
+    await speech.played;
+  }
   if (session.foxyThinking === turn) session.foxyThinking = null;
 }
 

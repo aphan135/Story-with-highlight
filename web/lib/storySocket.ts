@@ -4,7 +4,7 @@
 // messages, same audio handling. The server runs the story; this only carries
 // the mic up and plays the voices back.
 //
-//   server -> page: scene, screen, line, read, progress, stuck, readDone, end,
+//   server -> page: scene, screen, line, lineMore, read, progress, stuck, readDone, end,
 //                   foxy, partial, latency, audio, audio_done, stop_audio
 //   page -> server: mic audio (binary PCM16 @16k), { type: "played", id }
 
@@ -14,6 +14,7 @@ export type ServerMessage =
   | { type: "scene"; title: string; art: string; caption: string; image?: string }
   | { type: "screen"; art: string; caption: string; image?: string }
   | { type: "line"; id: string; speaker: Speaker; line: string; question: boolean }
+  | { type: "lineMore"; id: string; text: string }
   | { type: "read"; words: string[] }
   | { type: "progress"; word: number }
   | { type: "stuck"; word: number }

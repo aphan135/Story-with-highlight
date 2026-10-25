@@ -24,7 +24,9 @@ let client: Anthropic | null = null;
 export async function askFoxy(
   history: { role: "user" | "assistant"; content: string }[],
   story: string[],
-  question: string
+  question: string,
+  onSentence: (text: string) => void = () => {},
+  cancelled: () => boolean = () => false
 ): Promise<string> {
   const { kind } = screenInput(question);
   if (kind === "distress" || kind === "personal") {
@@ -32,43 +34,71 @@ export async function askFoxy(
   }
 
   history.push({ role: "user", content: question });
-  let line = FALLBACK;
-  if (process.env.ANTHROPIC_API_KEY) {
+  const sentences: string[] = [];
+  if (process.env.ANTHROPIC_API_KEY && !cancelled()) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const cancellation = setInterval(() => { if (cancelled()) controller.abort(); }, 50);
+    const emit = (text: string) => {
+      if (cancelled() || controller.signal.aborted) return false;
+      const checked = screenOutput(text);
+      if (!checked.ok || DONE.test(checked.line)) return false;
+      clearTimeout(timeout);
+      sentences.push(checked.line);
+      onSentence(checked.line);
+      return sentences.length < 3;
+    };
     try {
       client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      // Non-streaming and text blocks only; the child is waiting in silence.
-      const res = await withTimeout(
-        client.messages.create({
-          model: "claude-haiku-5-5",
-          max_tokens: 300,
-          thinking: { type: "disabled" },
-          system: `${SYSTEM}\n\nStory so far:\n${story.join("\n")}`,
-          messages: history,
-        }),
-        4000
-      );
-      const raw = res.content
-        .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-      const checked = screenOutput(raw);
-      if (checked.ok && !DONE.test(checked.line)) line = checked.line;
+      const stream = await client.messages.create({
+        model: "claude-haiku-5-5",
+        max_tokens: 300,
+        thinking: { type: "disabled" },
+        stream: true,
+        system: `${SYSTEM}\n\nStory so far:\n${story.join("\n")}`,
+        messages: history,
+      }, { signal: controller.signal });
+      let buffer = "";
+      chunks: for await (const event of stream) {
+        if (cancelled() || controller.signal.aborted) break;
+        if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
+        buffer += event.delta.text;
+        let sentence: string | undefined;
+        while ((sentence = firstSentence(buffer))) {
+          buffer = buffer.slice(sentence.length);
+          if (!emit(sentence)) {
+            controller.abort();
+            break chunks;
+          }
+        }
+      }
+      if (buffer.trim()) emit(buffer);
     } catch (err) {
-      console.error("[foxy]", err);
+      if (!controller.signal.aborted) console.error("[foxy]", err);
+    } finally {
+      clearTimeout(timeout);
+      clearInterval(cancellation);
+      controller.abort();
     }
   }
+  if (!sentences.length && !cancelled()) {
+    sentences.push(FALLBACK);
+    onSentence(FALLBACK);
+  }
+  const line = sentences.join(" ");
+  if (!line) return "";
   history.push({ role: "assistant", content: line });
   return line;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms)),
-  ]);
+function firstSentence(text: string): string | undefined {
+  return text.match(/^[\s\S]*?[.!?]+/)?.[0];
 }
 
 if (import.meta.main) {
+  if (firstSentence("One! Two? Still") !== "One!" || firstSentence("Still thinking") !== undefined) {
+    throw new Error("firstSentence failed");
+  }
   for (const text of ["Hey, Foxy.", "hey foxie why is the wolf mean", "hi fox", "hay foxey", "hello fox", "a foxy", "foxy", "foxie", "foxey"]) {
     if (!WAKE.test(text)) throw new Error(`WAKE missed ${text}`);
   }

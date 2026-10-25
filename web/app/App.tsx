@@ -51,6 +51,7 @@ export default function App() {
           foxy={story.foxy}
           foxyLine={story.foxyLine}
           partial={story.partial}
+          answer={story.answer}
           error={story.error}
           onRestart={story.start}
           onExit={exitStory}
