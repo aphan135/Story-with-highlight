@@ -16,6 +16,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { answerLevel } from "./prompts";
 import type { QuestionId, Speaker } from "./story";
 
+/**
+ * Transcripts are the child's words. They stay in memory for the length of
+ * one turn and are never written anywhere. Set DEBUG=1 to see them while
+ * developing; the shipped default prints nothing a child said.
+ */
+const DEBUG = !!process.env.DEBUG;
+
+
 /** How a question talks. server.ts supplies the real voice and mic. */
 export type Talk = {
   say(speaker: Speaker, line: string): Promise<void>;
@@ -297,7 +305,7 @@ async function reflect(about: string, childText: string | null, fallback: string
       .map((b) => b.text)
       .join("");
     const line = raw.match(/LINE:\s*([\s\S]*)$/i)?.[1]?.replace(/\s+/g, " ").trim();
-    console.log(`[reflect] ${JSON.stringify(raw)}`);
+    if (DEBUG) console.log(`[reflect] ${JSON.stringify(raw)}`);
 
     // Only spoken words reach the child; anything off-format gets the template.
     if (!line || line.length > 220 || line.includes("?")) return fallback;

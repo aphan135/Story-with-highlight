@@ -25,6 +25,8 @@ export function useStory() {
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Flips once the story has actually begun, whether by voice or by a click.
+  const [picked, setPicked] = useState(false);
   const conn = useRef<ReturnType<typeof connectStory> | null>(null);
   // Read inside socket callbacks, which outlive any one render.
   const live = useRef({ question: false, reading: false, partial: "", lineId: "" });
@@ -80,6 +82,7 @@ export function useStory() {
       case "partial": live.current.partial = msg.text; setPartial(msg.text); break;
       case "latency": setLatencyMs(msg.ms); break;
       case "end": setStatus("done"); setPartial(""); break;
+      case "picked": setPicked(true); break;
     }
   }
 
@@ -91,8 +94,10 @@ export function useStory() {
     }
   }
 
-  function start() {
+  function start(opts?: { pick?: boolean }) {
+    const waitForTitle = opts?.pick === true;
     conn.current?.close();
+    setPicked(false);
     live.current = { question: false, reading: false, partial: "", lineId: "" };
     setScene(null); setNarration(""); setLine(null); setReading(null);
     setFoxy(false); setFoxyLine(""); setAnswer("");
@@ -101,6 +106,7 @@ export function useStory() {
     setStatus("connecting");
     conn.current = connectStory({
       demo: new URLSearchParams(window.location.search).has("demo"),
+      pick: waitForTitle,
       onMessage,
       onPlayed,
       onOpen: () => setStatus(s => (s === "connecting" ? "speaking" : s)),
@@ -116,7 +122,14 @@ export function useStory() {
     conn.current?.close();
     conn.current = null;
     setStatus("idle");
+    setPicked(false);
   }
 
-  return { status, scene, image, narration, line, reading, foxy, foxyLine, partial, answer, latencyMs, transcript, error, start, stop };
+  /** The cover was opened: tell the server to stop waiting for the title. */
+  function pick() {
+    if (conn.current) conn.current.pick();
+    else start();
+  }
+
+  return { status, scene, image, narration, line, reading, foxy, foxyLine, partial, answer, latencyMs, transcript, error, picked, start, stop, pick };
 }

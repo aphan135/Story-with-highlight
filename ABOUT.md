@@ -197,8 +197,12 @@ otherwise is worse than owning them.
 Children's voices are among the most sensitive inputs a system can take, so the
 handling is deliberately boring:
 
-- **Audio is discarded after transcription.** Nothing is written to disk.
-- **State lives in memory for the session only.** Closing the tab ends it.
+- **Audio is discarded after transcription.** Nothing is written to disk: no
+  database, no log file, no browser storage.
+- **State lives in memory for the session only.** What the child said is wiped
+  when the story ends, and again when the tab closes (`forget()` in
+  `server.ts`). Transcripts are not printed either unless a developer sets
+  `DEBUG=1`.
 - **No accounts, no profiles, no identifiers.** The system does not know who the
   child is and has no way to find out.
 - **Content is filtered before it reaches the child**, and the characters are
@@ -206,6 +210,13 @@ handling is deliberately boring:
 - **The adult is not removed.** This is built to be used near a parent, not
   instead of one, and the best version of this is a child who then goes and tells
   someone what happened in their book.
+
+What we cannot claim: the audio and the transcript still travel to Cartesia and
+to Anthropic, and what those vendors keep is their policy, not ours. Cartesia's
+zero-data-retention option is enterprise-only, so we cannot enable it on a
+hackathon account. For a real product used by children that is the first thing
+we would negotiate, and until it is in place the honest statement is that
+nothing is retained *on our side*.
 
 ## 11. Where it goes next
 

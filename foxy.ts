@@ -3,7 +3,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { screenInput, screenOutput } from "./story-engine/safety";
 
 export const WAKE = /\b(?:(?:hey|hi|hay|hello|a)[\s,!.?]+fox\w*|foxy|foxie|foxey)\b/i;
-export const DONE = /\b(?:(?:i['’]?m|i am)\s+(?:all\s+)?(?:done|finished)|bye[\s,!.?]+fox\w*|no more questions)\b/i;
+/**
+ * Leaving Foxy. The whole phrase on screen — "I'm done, Foxy" — not just the
+ * first half, so an "I'm done" inside an answer does not close him by accident.
+ * Ink mishears "I'm done" as "Hi Don" / "I'm Don" often enough that those
+ * spellings are matched too: a child who says the line and is answered instead
+ * of released loses trust in the whole thing.
+ */
+export const DONE =
+  /\b(?:(?:i['’]?m|i am|im)\s+(?:all\s+)?(?:done|dun|don)|(?:hi|high|hey)\s+don)[\s,!.?]+fox\w*\b/i;
 
 export function afterWake(text: string): string {
   const wake = WAKE.exec(text);

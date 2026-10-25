@@ -16,6 +16,15 @@ export default function App() {
   const [operator, setOperator] = useState(false);
   useEffect(() => { setOperator(new URLSearchParams(window.location.search).get("op") === "1"); }, []);
 
+  // The shelf listens: Ink is live and waiting to hear a title.
+  function toShelf() {
+    setScreen("shelf");
+    story.start({ pick: true });
+  }
+
+  // Said the title, or opened the cover — either way the server has begun.
+  useEffect(() => { if (story.picked) setScreen("story"); }, [story.picked]);
+
   async function askForMic() {
     setAsking(true);
     setScreen((await requestMic()) ? "check" : "help");
@@ -23,21 +32,21 @@ export default function App() {
   }
 
   // Opening the cover is the click that starts audio (browsers need a gesture).
+  // The shelf connection is already open, so this only tells it to go.
   function openStory() {
-    setScreen("story");
-    story.start();
+    story.pick();
   }
 
   function exitStory() {
     story.stop();
-    setScreen("shelf");
+    toShelf();
   }
 
   return (
     <div className={s.fit}>
       {screen === "home" && <Home onBegin={() => setScreen("setup")} />}
       {screen === "setup" && <VoiceSetup busy={asking} onEnable={askForMic} onBack={() => setScreen("home")} />}
-      {screen === "check" && <VoiceCheck onContinue={() => setScreen("shelf")} onHelp={() => setScreen("help")} onBack={() => setScreen("setup")} />}
+      {screen === "check" && <VoiceCheck onContinue={toShelf} onHelp={() => setScreen("help")} onBack={() => setScreen("setup")} />}
       {screen === "help" && <MicHelp busy={asking} onRetry={askForMic} onBack={() => setScreen("setup")} />}
       {screen === "shelf" && <Bookshelf onPick={openStory} />}
       {screen === "story" && (

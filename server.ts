@@ -28,6 +28,14 @@ import { coachLine } from "./prompts";
 import { WAKE, DONE, afterWake, askFoxy } from "./foxy";
 import { screenInput } from "./story-engine/safety";
 
+/**
+ * Transcripts are the child's words. They stay in memory for the length of
+ * one turn and are never written anywhere. Set DEBUG=1 to see them while
+ * developing; the shipped default prints nothing a child said.
+ */
+const DEBUG = !!process.env.DEBUG;
+
+
 const KEY = process.env.CARTESIA_API_KEY!;
 const VERSION = "2026-03-01";
 /**
@@ -85,6 +93,10 @@ type Session = {
   sonic: WebSocket;
   demo: boolean;
   closed: boolean;
+  /** True while the bookshelf is up and Ink is listening for a title. */
+  awaitingPick: boolean;
+  sonicReady: boolean;
+  started: boolean;
   /**
    * idle: narration, only Foxy's wake words are heard.
    * reading: a READ ALOUD bubble is up. listening: a FREE RESPONSE is open.
@@ -124,6 +136,27 @@ type Session = {
 
 const sessions = new Map<WebSocket, Session>();
 
+/**
+ * What counts as choosing The Three Little Pigs on the bookshelf. Loose on
+ * purpose: a six-year-old says "pigs!", not the full title, and Ink gives us
+ * the whole turn to match against.
+ */
+const PICK = /\bpigs?\b|three\s+little/i;
+
+/**
+ * Start the story. Called when the child says the title, when a grown-up opens
+ * the cover, or straight away when the shelf was skipped. Runs once; waits for
+ * Sonic if the choice came in first.
+ */
+function begin(session: Session) {
+  if (session.started) return;
+  session.awaitingPick = false;
+  if (!session.sonicReady) return; // Sonic's "open" calls begin again
+  session.started = true;
+  send(session, { type: "picked" });
+  runStory(session).catch((err) => console.error("[story]", err));
+}
+
 const send = (session: Session, msg: object) => session.browser.send(JSON.stringify(msg));
 
 /** Ink 2 does semantic turn detection itself — no VAD threshold to tune. */
@@ -138,7 +171,16 @@ function openInk(session: Session) {
   ink.onmessage = (e) => {
     const msg = JSON.parse(e.data as string);
 
-    console.log(`[ink] ${msg.type}`, msg.transcript ?? "");
+    if (DEBUG) console.log(`[ink] ${msg.type}`, msg.transcript ?? "");
+
+    // Bookshelf: the only thing we listen for is the title. Nothing else in
+    // this handler applies until the story is running.
+    if (session.awaitingPick) {
+      if (msg.type === "turn.update" || msg.type === "turn.end") {
+        if (PICK.test(msg.transcript ?? "")) begin(session);
+      }
+      return;
+    }
 
     switch (msg.type) {
       case "turn.start":
@@ -494,7 +536,7 @@ async function ask(session: Session, speaker: Speaker, line: string): Promise<st
   await say(session, speaker, line, true);
   session.waitingSince = performance.now();
   const text = await heard;
-  console.log(`[answer] ${JSON.stringify(text)}`);
+  if (DEBUG) console.log(`[answer] ${JSON.stringify(text)}`);
   return text;
 }
 
@@ -542,6 +584,20 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 // The story
 
+/**
+ * Drop everything the child said. Called when the story ends and again when
+ * the tab closes. Nothing here was ever written to disk; this is the copy
+ * held in memory for the length of one session.
+ */
+function forget(session: Session) {
+  session.foxyHistory = [];
+  session.storySoFar = [];
+  session.lastAsk = null;
+  session.lastLine = undefined;
+  session.cutByFoxy = null;
+  session.reader = null;
+}
+
 async function runStory(session: Session) {
   const talk: Talk = {
     say: (speaker, line) => say(session, speaker, line),
@@ -568,6 +624,7 @@ async function runStory(session: Session) {
       case "demoStop":
         if (session.demo) {
           send(session, { type: "end", demo: true });
+          forget(session);
           return;
         }
         break;
@@ -576,11 +633,12 @@ async function runStory(session: Session) {
   await untilFoxyGone(session);
   if (session.closed) return;
   send(session, { type: "end", demo: false });
+  forget(session);
 }
 
 // ---------------------------------------------------------------------------
 
-Bun.serve<{ demo: boolean }, never>({
+Bun.serve<{ demo: boolean; pick: boolean }, never>({
   // Railway (and most hosts) pass the port in; 3000 locally.
   port: Number(process.env.PORT) || 3000,
 
@@ -588,7 +646,8 @@ Bun.serve<{ demo: boolean }, never>({
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
       const demo = url.searchParams.has("demo");
-      return server.upgrade(req, { data: { demo } })
+      const pick = url.searchParams.has("pick");
+      return server.upgrade(req, { data: { demo, pick } })
         ? undefined
         : new Response("upgrade failed", { status: 400 });
     }
@@ -603,6 +662,9 @@ Bun.serve<{ demo: boolean }, never>({
         sonic: null!,
         demo: ws.data.demo,
         closed: false,
+        awaitingPick: ws.data.pick,
+        sonicReady: false,
+        started: false,
         mode: "idle",
         foxyPrev: "idle",
         foxyWaiters: [],
@@ -632,7 +694,10 @@ Bun.serve<{ demo: boolean }, never>({
 
       session.sonic.addEventListener(
         "open",
-        () => runStory(session).catch((err) => console.error("[story]", err)),
+        () => {
+          session.sonicReady = true;
+          if (!session.awaitingPick) begin(session);
+        },
         { once: true }
       );
     },
@@ -647,6 +712,8 @@ Bun.serve<{ demo: boolean }, never>({
         // Only the line still current counts; a late report for an older one is ignored.
         // 재생이 실제로 끝난 경우에만 한 박자 쉬고 다음으로 간다.
         if (msg.type === "played" && msg.id === session.contextId) played(session, true);
+        // A grown-up opened the cover instead of the child saying the title.
+        if (msg.type === "pick") begin(session);
         return;
       }
 
@@ -668,6 +735,7 @@ Bun.serve<{ demo: boolean }, never>({
         session.foxyWaiters.splice(0).forEach((resolve) => resolve());
         session.onRead?.();
         session.onAnswer?.(null);
+        forget(session);
       }
       session?.ink.close();
       session?.sonic.close();

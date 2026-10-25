@@ -6,7 +6,8 @@
 //
 //   server -> page: scene, screen, line, lineMore, read, progress, stuck, readDone, end,
 //                   foxy, partial, latency, audio, audio_done, stop_audio
-//   page -> server: mic audio (binary PCM16 @16k), { type: "played", id }
+//   page -> server: mic audio (binary PCM16 @16k), { type: "played", id },
+//                   { type: "pick" }
 
 export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf" | "foxy";
 
@@ -22,7 +23,8 @@ export type ServerMessage =
   | { type: "foxy"; on: boolean }
   | { type: "end"; demo: boolean }
   | { type: "partial"; text: string }
-  | { type: "latency"; ms: number };
+  | { type: "latency"; ms: number }
+  | { type: "picked" };
 
 const SEND_RATE = 16000; // Ink input
 const PLAY_RATE = 24000; // Sonic output
@@ -32,6 +34,8 @@ export const STORY_SERVER = process.env.NEXT_PUBLIC_STORY_SERVER ?? "ws://localh
 
 export function connectStory(opts: {
   demo: boolean;
+  /** Open on the bookshelf: listen for the title, do not start the story yet. */
+  pick?: boolean;
   onMessage(msg: ServerMessage): void;
   /** Fires when the current line has finished playing in the speaker. */
   onPlayed(): void;
@@ -39,7 +43,8 @@ export function connectStory(opts: {
   onClose(clean: boolean): void;
 }) {
   const ctx = new AudioContext({ sampleRate: PLAY_RATE });
-  const ws = new WebSocket(`${STORY_SERVER}${opts.demo ? "?demo" : ""}`);
+  const params = [opts.demo && "demo", opts.pick && "pick"].filter(Boolean).join("&");
+  const ws = new WebSocket(`${STORY_SERVER}${params ? `?${params}` : ""}`);
   ws.binaryType = "arraybuffer";
 
   let sources: AudioBufferSourceNode[] = [];
@@ -142,6 +147,10 @@ export function connectStory(opts: {
   return {
     /** The playback context, for interface sounds. */
     audio: ctx,
+    /** Opening the cover: start the story without waiting to hear the title. */
+    pick() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "pick" }));
+    },
     close() {
       closing = true;
       ws.close();

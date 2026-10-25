@@ -26,6 +26,14 @@ import {
   type State,
 } from "./prompts";
 
+/**
+ * Transcripts are the child's words. They stay in memory for the length of
+ * one turn and are never written anywhere. Set DEBUG=1 to see them while
+ * developing; the shipped default prints nothing a child said.
+ */
+const DEBUG = !!process.env.DEBUG;
+
+
 export type Turn = {
   speaker: "pip" | "owl";
   line: string;
@@ -122,7 +130,7 @@ async function generate(
       `[raw-empty] stop=${res.stop_reason} blocks=${JSON.stringify(res.content.map((b) => b.type))}`
     );
   } else {
-    console.log(`[raw] crowd=${crowd} level=${level} ${JSON.stringify(raw)}`);
+    if (DEBUG) console.log(`[raw] crowd=${crowd} level=${level} ${JSON.stringify(raw)}`);
   }
 
   const parsed = parseReply(raw);
