@@ -75,6 +75,8 @@
   font: 400 calc(17.375 * var(--u))/1.25 var(--font-body), sans-serif;
 }
 .notice > * { margin: 0; }
+/* The notice makes the mic screen taller; start its column higher so the button clears the edge. */
+.setup:has(.notice) { top: calc(140 * var(--u)); }
 .notice h2 { font: 700 calc(19.547 * var(--u))/1.25 var(--font-body), sans-serif; }
 
 /* Five bars; the mic level (0..1, set from JS as --level) stretches them. */

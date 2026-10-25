@@ -48,7 +48,8 @@ export function VoiceSetup({ onEnable, onBack, busy }: { onEnable(): void; onBac
       <h1 className={s.title}>Let’s get<br />ready to talk.</h1>
       <section className={s.notice} aria-labelledby="before-we-begin">
         <h2 id="before-we-begin">Before we begin</h2>
-        <p>TaleTail uses the microphone to hear your child and respond. Audio is sent to Cartesia for speech recognition; some recognized text is sent to Anthropic to generate replies.</p>
+        <p>TaleTail uses the microphone to hear your child and respond. Audio is sent to Cartesia for speech recognition, and some recognized text is sent to Anthropic to generate replies.</p>
+        <p>TaleTail deletes its audio recordings when the conversation ends.</p>
         <p>Please avoid sharing names, addresses, schools, or other personal details. A grown-up should stay nearby.</p>
       </section>
       <p className={s.bodyStrong}>You can speak naturally — even while a character is talking.</p>
