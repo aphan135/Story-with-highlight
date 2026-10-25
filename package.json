@@ -2,6 +2,7 @@
   "name": "calhacks",
   "private": true,
   "scripts": {
+    "start": "bun run server.ts",
     "typecheck": "bun check"
   },
   "devDependencies": {

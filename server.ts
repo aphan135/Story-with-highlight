@@ -581,7 +581,8 @@ async function runStory(session: Session) {
 // ---------------------------------------------------------------------------
 
 Bun.serve<{ demo: boolean }, never>({
-  port: 3000,
+  // Railway (and most hosts) pass the port in; 3000 locally.
+  port: Number(process.env.PORT) || 3000,
 
   fetch(req, server) {
     const url = new URL(req.url);
@@ -675,4 +676,4 @@ Bun.serve<{ demo: boolean }, never>({
   },
 });
 
-console.log("Story Quest on http://localhost:3000  (short demo: /?demo)");
+console.log(`Story Quest on http://localhost:${process.env.PORT || 3000}  (short demo: /?demo)`);
