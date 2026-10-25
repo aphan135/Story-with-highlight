@@ -159,14 +159,25 @@ function begin(session: Session) {
 
 const send = (session: Session, msg: object) => session.browser.send(JSON.stringify(msg));
 
+/**
+ * The key travels in a header, not the URL, so it cannot reach a log. This is
+ * the second line of that defence: anything printed from a socket error is
+ * scrubbed first, in case a URL ever carries one again.
+ */
+const safeError = (e: unknown) =>
+  String((e as { message?: string })?.message ?? e).replace(/(api_key|access_token)=[^&\s"']+/gi, "$1=***");
+
+/** Cartesia accepts the key as a header for server-side calls; see README. */
+const CARTESIA_AUTH = { headers: { "X-API-Key": KEY } };
+
 /** Ink 2 does semantic turn detection itself — no VAD threshold to tune. */
 function openInk(session: Session) {
   const url =
     `wss://api.cartesia.ai/stt/turns/websocket` +
     `?model=ink-2&encoding=pcm_s16le&sample_rate=16000` +
-    `&cartesia_version=${VERSION}&api_key=${KEY}`;
+    `&cartesia_version=${VERSION}`;
 
-  const ink = new WebSocket(url);
+  const ink = new WebSocket(url, CARTESIA_AUTH);
 
   ink.onmessage = (e) => {
     const msg = JSON.parse(e.data as string);
@@ -229,16 +240,16 @@ function openInk(session: Session) {
     }
   };
 
-  ink.onerror = (e) => console.error("[ink]", e);
+  ink.onerror = (e) => console.error("[ink]", safeError(e));
   return ink;
 }
 
 function openSonic(session: Session) {
   const url =
     `wss://api.cartesia.ai/tts/websocket` +
-    `?cartesia_version=${VERSION}&api_key=${KEY}`;
+    `?cartesia_version=${VERSION}`;
 
-  const sonic = new WebSocket(url);
+  const sonic = new WebSocket(url, CARTESIA_AUTH);
 
   sonic.onmessage = (e) => {
     const msg = JSON.parse(e.data as string);
@@ -279,7 +290,7 @@ function openSonic(session: Session) {
     }
   };
 
-  sonic.onerror = (e) => console.error("[sonic]", e);
+  sonic.onerror = (e) => console.error("[sonic]", safeError(e));
   return sonic;
 }
 

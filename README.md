@@ -160,6 +160,9 @@ The server and the web app are deployed separately:
 - **Network dependent.** Both APIs are remote; there is no offline mode.
 - **It cannot see the book.** If the child describes the page wrong, the story
   goes along with it.
+- **The story server is open.** Anyone who reaches `/ws` on a deployed server
+  can start a session on our Cartesia credit. Fine for a demo on a laptop, not
+  for a public URL; a shared-token check is the next thing to add.
 - **Shared voices.** The pig voices are instant clones living on one team
   member's Cartesia account; another key needs its own voice IDs in `.env`.
 - **Demo voice casting.** The cloned pig voices come from royalty-free Pixabay

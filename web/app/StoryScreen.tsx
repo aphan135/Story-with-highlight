@@ -95,14 +95,18 @@ export default function StoryScreen({ status, scene, image, narration, line, rea
         </p>
       ) : spoken && spoken.speaker !== "narrator" && spoken.speaker !== "foxy" ? (
         // The child's answer appears as a reply under the question, chat style.
-        <div className={`${s.chat} ${spoken.speaker === "wolf" && image && WOLF_CENTRE.has(image) ? s.center : SPOT[spoken.speaker]}`}>
-          <p className={s.bubble}>
-            {spoken.text}
-            <Tail />
-          </p>
+        // The reply is a sibling, not a child, of the positioned block: inside
+        // it, it would slide sideways with every change of speaker.
+        <>
+          <div className={`${s.chat} ${spoken.speaker === "wolf" && image && WOLF_CENTRE.has(image) ? s.center : SPOT[spoken.speaker]}`}>
+            <p className={s.bubble}>
+              {spoken.text}
+              <Tail />
+            </p>
+          </div>
           {/* Mounted with the bubble: screen readers skip live regions inserted already filled. */}
           <p className={s.reply} aria-live="polite">{(spoken.question && partial) || answer}</p>
-        </div>
+        </>
       ) : null}
 
       <div className={`${s.abs} ${s.textBar}`} role="status">

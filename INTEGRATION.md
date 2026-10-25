@@ -74,9 +74,10 @@ If you change or add a message in `server.ts`, mirror it in
   public `https://…` URL; the WebSocket is `wss://<that host>/ws`.
 - **Web → Vercel.** Root Directory `web`. Env var
   `NEXT_PUBLIC_STORY_SERVER=wss://<railway host>/ws`.
-- **Open issue in `server.ts`:** the Cartesia key is sent as `api_key=` in the
-  Ink/Sonic URLs, and Bun prints that URL in WebSocket errors, so the key ends
-  up in the logs. Send it as a header instead (Bun's `new WebSocket(url, {
-  headers })`) before deploying.
+- **Fixed:** the Cartesia key used to travel as `api_key=` in the Ink and Sonic
+  URLs, where Bun printed it in WebSocket errors. It now goes in an `X-API-Key`
+  header (`CARTESIA_AUTH` in `server.ts`), so no URL carries it, and socket
+  errors are scrubbed through `safeError()` before they reach the console.
 - **Open issue:** anyone who can reach the server's `/ws` can start a session
-  on our Cartesia credit. Add a shared token check before sharing the URL.
+  on our Cartesia credit. A shared token check belongs here before this URL is
+  shared beyond the demo.

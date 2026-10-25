@@ -151,12 +151,15 @@ button.cover:hover { transform: scale(1.04); }
 .left .tail { left: calc(165.3 * var(--u)); }
 .reading { outline: calc(5 * var(--u)) solid var(--sq-fox); }
 
-/* A character's question with the child's spoken answer under it. The spot
-   class (.left/.center) positions the pair; the gap leaves room for the tail. */
-.chat { position: absolute; display: flex; flex-direction: column; gap: calc(40 * var(--u)); }
+/* A character's question. The spot class (.left/.center) positions it. */
+.chat { position: absolute; }
 .chat .bubble { position: relative; }
+/* The child's own words, under the question. Anchored to the picture rather
+   than to the speaker's block — inside it, the bubble jumped sideways every
+   time the speaker changed. Right edge matches the child's READ ALOUD line. */
 .reply {
-  align-self: flex-end; max-width: 80%; margin: 0;
+  position: absolute; right: calc(61 * var(--u)); top: calc(300 * var(--u));
+  max-width: calc(560 * var(--u)); margin: 0;
   padding: calc(16 * var(--u)) calc(24 * var(--u)); border-radius: calc(24 * var(--u));
   background: var(--sq-mark);
   font: 700 calc(26 * var(--u))/1.25 var(--font-body), sans-serif;
