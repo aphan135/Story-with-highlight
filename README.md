@@ -4,6 +4,8 @@
 
 Built at Cal Hacks 13.0 for the Cartesia track.
 
+**Deployed on:** https://story-with-highlight.vercel.app/
+
 The child plays the youngest of the Three Little Pigs. A narrator and three characters speak, each in their own voice. When it is the child's turn, a line appears in a speech bubble and each word lights up as the child reads it correctly. If the child gets stuck on a word, the narrator says it and has the child repeat it. Between scenes, the pigs ask the child open questions ("What would you build with?" "Why did it stay standing?") and reply to what the child actually said.
 
 ## How it works
