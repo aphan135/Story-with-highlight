@@ -39,6 +39,18 @@ const SPEED: Record<Speaker, number> = {
   wolf: 0.7,
 };
 
+/**
+ * 캐릭터별 음량. 1.0 이 기본이고 0.5~2.0 범위다. 속도처럼 엄밀한 배수가
+ * 아니라 가이드다. 돼지 목소리가 내레이터보다 훨씬 작게 들려서 올렸다 —
+ * 리허설 때 들어 보고 여기서 맞춘다.
+ */
+const VOLUME: Record<Speaker, number> = {
+  narrator: 1.0,
+  firstPig: 1.6,
+  secondPig: 1.6,
+  wolf: 1.0,
+};
+
 const VOICES: Record<Speaker, string> = {
   narrator: process.env.NARRATOR_VOICE_ID!,
   firstPig: process.env.FIRST_PIG_VOICE_ID!,
@@ -180,7 +192,7 @@ function openSonic(session: Session) {
       if (msg.context_id === session.contextId && !session.retrying && session.lastLine) {
         session.retrying = true;
         console.log("[sonic] 내레이터 목소리로 다시 시도");
-        sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator);
+        sendToSonic(session, VOICES.narrator, session.lastLine, session.contextId, SPEED.narrator, VOLUME.narrator);
         return;
       }
 
@@ -212,7 +224,7 @@ function say(session: Session, speaker: Speaker, line: string, question = false)
 
   session.lastLine = line;
   session.retrying = false;
-  sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker]);
+  sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker], VOLUME[speaker]);
 
   return new Promise((resolve) => (session.onPlayed = resolve));
 }
@@ -222,7 +234,8 @@ function sendToSonic(
   voiceId: string,
   line: string,
   contextId: string,
-  speed: number
+  speed: number,
+  volume: number
 ) {
   session.sonic.send(
     JSON.stringify({
@@ -230,7 +243,7 @@ function sendToSonic(
       transcript: line,
       voice: { mode: "id", id: voiceId },
       language: "en",
-      generation_config: { speed },
+      generation_config: { speed, volume },
       context_id: contextId,
       continue: false, // last chunk for this context — lowest latency
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 24000 },
