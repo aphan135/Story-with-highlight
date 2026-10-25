@@ -18,6 +18,8 @@ export function useStory() {
   const [narration, setNarration] = useState("");
   const [line, setLine] = useState<Line | null>(null);
   const [reading, setReading] = useState<Reading | null>(null);
+  const [foxy, setFoxy] = useState(false);
+  const [foxyLine, setFoxyLine] = useState("");
   const [partial, setPartial] = useState("");
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -32,16 +34,21 @@ export function useStory() {
     switch (msg.type) {
       case "scene": setScene(msg.title); setImage(msg.image ?? null); break;
       case "screen": if (msg.image) setImage(msg.image); break;
+      case "foxy": setFoxy(msg.on); setFoxyLine(""); break;
       case "line": {
-        live.current.question = msg.question;
+        live.current.question = msg.speaker === "foxy" ? false : msg.question;
         // The server sends only partials, so the last one before the next line
         // is the child's turn as heard.
         const child = live.current.partial;
         live.current.partial = "";
-        setLine({ speaker: msg.speaker, text: msg.line, question: msg.question });
-        if (msg.speaker === "narrator") setNarration(msg.line);
         setTranscript(t => [...t, ...(child ? [{ who: "child" as const, text: child }] : []), { who: msg.speaker, text: msg.line }]);
         setPartial("");
+        if (msg.speaker === "foxy") {
+          setFoxyLine(msg.line);
+          return;
+        }
+        setLine({ speaker: msg.speaker, text: msg.line, question: msg.question });
+        if (msg.speaker === "narrator") setNarration(msg.line);
         if (!live.current.reading) setStatus("speaking");
         break;
       }
@@ -78,6 +85,7 @@ export function useStory() {
     conn.current?.close();
     live.current = { question: false, reading: false, partial: "" };
     setScene(null); setNarration(""); setLine(null); setReading(null);
+    setFoxy(false); setFoxyLine("");
     setImage(null);
     setPartial(""); setLatencyMs(null); setTranscript([]); setError(null);
     setStatus("connecting");
@@ -100,5 +108,5 @@ export function useStory() {
     setStatus("idle");
   }
 
-  return { status, scene, image, narration, line, reading, partial, latencyMs, transcript, error, start, stop };
+  return { status, scene, image, narration, line, reading, foxy, foxyLine, partial, latencyMs, transcript, error, start, stop };
 }

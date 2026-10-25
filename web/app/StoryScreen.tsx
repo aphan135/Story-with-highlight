@@ -25,6 +25,8 @@ type Props = {
   narration: string;
   line: Line | null;
   reading: Reading | null;
+  foxy: boolean;
+  foxyLine: string;
   partial: string;
   error: string | null;
   onRestart(): void;
@@ -54,20 +56,31 @@ const SPOT = { firstPig: s.left, secondPig: s.center, wolf: s.left } as const;
 // In these pictures the wolf stands mid-frame, at the door, so his tail points from the centre.
 const WOLF_CENTRE = new Set(["wolf-knocks", "wolf-blows"]);
 
-export default function StoryScreen({ status, scene, image, narration, line, reading, partial, error, onRestart, onExit }: Props) {
+export default function StoryScreen({ status, scene, image, narration, line, reading, foxy, foxyLine, partial, error, onRestart, onExit }: Props) {
   const art = (image && Object.hasOwn(ART, image) ? ART[image] : undefined)
     ?? { src: scene === null ? opening : conversation, full: false };
-  const listening = status === "listening" || status === "reading";
+  const listening = !foxy && (status === "listening" || status === "reading");
   const spoken = !reading && line && line.speaker !== "narrator" && (status === "speaking" || status === "listening") ? line : null;
 
   return (
     <main className={`${s.stage} ${s.sky}`}>
-      <div className={`${s.abs} ${art.full ? s.sceneFull : s.scene}`}>
+      <div className={`${s.abs} ${art.full ? s.sceneFull : s.scene} ${foxy ? s.blurred : ""}`}>
         <Image src={art.src} alt="" fill sizes="100vw" priority />
       </div>
       {!art.full && <p className={`${s.abs} ${s.storyLogo}`}>TaleTail</p>}
 
-      {reading ? (
+      {foxy ? (
+        <>
+          <img src="/figma/fox.svg" alt="" className={`${s.abs} ${s.foxPop}`} />
+          {foxyLine && (
+            <p className={`${s.bubble} ${s.foxyBubble}`}>
+              {foxyLine}
+              <Tail />
+            </p>
+          )}
+          <p className={`${s.abs} ${s.foxyHint}`}>Say “I'm done, Foxy” when you're finished</p>
+        </>
+      ) : reading ? (
         // The child reads this aloud, above the youngest pig (Figma DEMO 05).
         // Each word lights up once the server hears it.
         <p className={`${s.bubble} ${s.child} ${s.reading}`} aria-live="polite">
@@ -78,7 +91,7 @@ export default function StoryScreen({ status, scene, image, narration, line, rea
           ))}
           <Tail />
         </p>
-      ) : spoken && spoken.speaker !== "narrator" ? (
+      ) : spoken && spoken.speaker !== "narrator" && spoken.speaker !== "foxy" ? (
         <p className={`${s.bubble} ${spoken.speaker === "wolf" && image && WOLF_CENTRE.has(image) ? s.center : SPOT[spoken.speaker]}`}>
           {spoken.text}
           <Tail />

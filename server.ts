@@ -12,10 +12,11 @@
  *          FREE RESPONSE: turn.end -> questions.ts
  *                                      |
  *                                      v
- *   browser <--PCM16 24k-- server <-- Sonic (four voices)
+ *   browser <--PCM16 24k-- server <-- Sonic (four voices, optional Foxy voice)
  *
  * .env:  CARTESIA_API_KEY=...  NARRATOR_VOICE_ID=...  FIRST_PIG_VOICE_ID=...
  *        SECOND_PIG_VOICE_ID=...  WOLF_VOICE_ID=...  (ANTHROPIC_API_KEY=...)
+ *        FOXY_VOICE_ID=... (optional, falls back to the narrator voice)
  *
  * Open http://localhost:3000/?demo to stop where the short demo stops.
  */
@@ -24,6 +25,7 @@ import { Reader } from "./reader";
 import { SCRIPT, type Speaker } from "./story";
 import { QUESTIONS, type Talk } from "./questions";
 import { coachLine } from "./prompts";
+import { WAKE, DONE, afterWake, askFoxy } from "./foxy";
 
 const KEY = process.env.CARTESIA_API_KEY!;
 const VERSION = "2026-03-01";
@@ -37,6 +39,7 @@ const SPEED: Record<Speaker, number> = {
   firstPig: 0.8,
   secondPig: 0.8,
   wolf: 0.7,
+  foxy: 0.9,
 };
 
 /**
@@ -49,6 +52,7 @@ const VOLUME: Record<Speaker, number> = {
   firstPig: 2.0,
   secondPig: 2.0,
   wolf: 1.0,
+  foxy: 1.0,
 };
 
 const VOICES: Record<Speaker, string> = {
@@ -56,6 +60,7 @@ const VOICES: Record<Speaker, string> = {
   firstPig: process.env.FIRST_PIG_VOICE_ID!,
   secondPig: process.env.SECOND_PIG_VOICE_ID!,
   wolf: process.env.WOLF_VOICE_ID!,
+  foxy: process.env.FOXY_VOICE_ID || process.env.NARRATOR_VOICE_ID!,
 };
 
 if (!KEY) throw new Error("CARTESIA_API_KEY missing — check .env");
@@ -80,10 +85,20 @@ type Session = {
   demo: boolean;
   closed: boolean;
   /**
-   * idle: narration, the child's speech is ignored.
+   * idle: narration, only Foxy's wake words are heard.
    * reading: a READ ALOUD bubble is up. listening: a FREE RESPONSE is open.
    */
-  mode: "idle" | "reading" | "listening";
+  mode: "idle" | "reading" | "listening" | "foxy";
+  foxyPrev: "idle" | "reading" | "listening";
+  foxyWaiters: (() => void)[];
+  cutByFoxy: string | null;
+  foxyNudged: boolean;
+  /** The Ink turn generating a reply, or null when Foxy is free. */
+  foxyThinking: number | null;
+  foxyWakeTurn: number;
+  foxyHistory: Parameters<typeof askFoxy>[0];
+  storySoFar: string[];
+  lastAsk: { speaker: Speaker; line: string } | null;
   /** Set at turn.end, cleared when the first audio byte goes out. */
   turnEndedAt: number | null;
   /** 현재 재생 중인 Sonic 컨텍스트. 바지인 시 버려진다. */
@@ -127,7 +142,8 @@ function openInk(session: Session) {
       case "turn.start":
         session.inkTurn++;
         session.childTalking = true;
-        session.reader?.startTurn();
+        if (session.mode === "reading") session.reader?.startTurn();
+        if (session.mode === "foxy") session.foxyThinking = null;
         // Barge-in only when it is the child's turn. Narration and the wolf
         // play through, so a chatty child does not skip the story.
         if (session.mode !== "idle") interrupt(session);
@@ -137,11 +153,28 @@ function openInk(session: Session) {
         // Partial transcript. While reading, this is what lights words up
         // as the child says them, instead of waiting for the turn to end.
         send(session, { type: "partial", text: msg.transcript });
+        if (session.mode === "foxy") break;
+        if (WAKE.test(msg.transcript ?? "") && !DONE.test(msg.transcript ?? "") &&
+          !(/foxy/i.test(session.lastLine ?? "") && (session.audioPlaying || performance.now() - session.waitingSince < 2000))) {
+          startFoxy(session);
+          break;
+        }
         if (session.mode === "reading") read(session, msg.transcript ?? "");
         break;
 
       case "turn.end":
         session.childTalking = false;
+        if (session.mode === "foxy") {
+          if (DONE.test(msg.transcript ?? "")) void endFoxy(session);
+          else void foxyAnswer(session, msg.transcript ?? "");
+          break;
+        }
+        if (WAKE.test(msg.transcript ?? "") && !DONE.test(msg.transcript ?? "") &&
+          !(/foxy/i.test(session.lastLine ?? "") && (session.audioPlaying || performance.now() - session.waitingSince < 2000))) {
+          startFoxy(session);
+          void foxyAnswer(session, msg.transcript ?? "");
+          break;
+        }
         if (session.inkTurn === session.ignoreTurn) break;
         if (session.mode === "reading") read(session, msg.transcript ?? "", true);
         else if (session.mode === "listening") {
@@ -185,6 +218,7 @@ function openSonic(session: Session) {
     }
 
     if (msg.type === "error") {
+      if (msg.context_id && msg.context_id !== session.contextId) return;
       console.error("[sonic]", msg.error_code ?? "", msg.message ?? "");
 
       // 보이스 ID가 틀리면 그 대사가 통째로 사라진다. 데모 중에 캐릭터가
@@ -209,8 +243,25 @@ function openSonic(session: Session) {
 // Speaking
 
 /** Speaks one line in that character's voice. Resolves when it has finished playing. */
-function say(session: Session, speaker: Speaker, line: string, question = false): Promise<void> {
-  if (session.closed) return Promise.resolve();
+async function say(session: Session, speaker: Speaker, line: string, question = false): Promise<void> {
+  await untilFoxyGone(session);
+  if (session.closed) return;
+  if (speaker !== "foxy") session.storySoFar.push(line);
+  while (!session.closed) {
+    await untilFoxyGone(session);
+    const id = await speak(session, speaker, line, question);
+    if (id && session.cutByFoxy === id) {
+      session.cutByFoxy = null;
+      continue;
+    }
+    await untilFoxyGone(session);
+    return;
+  }
+}
+
+/** Resolves with the utterance id after playback, including an interrupted line. */
+function speak(session: Session, speaker: Speaker, line: string, question = false): Promise<string | null> {
+  if (session.closed) return Promise.resolve(null);
   console.log(`[say] ${speaker}: ${line}`);
 
   // Lines play one at a time; a line cut short releases whoever waited on it.
@@ -226,7 +277,7 @@ function say(session: Session, speaker: Speaker, line: string, question = false)
   session.retrying = false;
   sendToSonic(session, VOICES[speaker], line, contextId, SPEED[speaker], VOLUME[speaker]);
 
-  return new Promise((resolve) => (session.onPlayed = resolve));
+  return new Promise((resolve) => (session.onPlayed = () => resolve(contextId)));
 }
 
 function sendToSonic(
@@ -277,9 +328,64 @@ function interrupt(session: Session) {
 }
 
 // ---------------------------------------------------------------------------
+// Foxy
+
+function untilFoxyGone(session: Session): Promise<void> {
+  if (session.mode !== "foxy" || session.closed) return Promise.resolve();
+  return new Promise((resolve) => session.foxyWaiters.push(resolve));
+}
+
+function startFoxy(session: Session) {
+  if (session.mode === "foxy" || session.closed) return;
+  session.foxyPrev = session.mode;
+  session.mode = "foxy";
+  session.cutByFoxy = session.audioPlaying ? session.contextId : null;
+  session.foxyWakeTurn = session.inkTurn;
+  session.foxyThinking = null;
+  session.foxyNudged = false;
+  interrupt(session);
+  send(session, { type: "foxy", on: true });
+}
+
+async function foxyAnswer(session: Session, text: string) {
+  const turn = session.inkTurn;
+  const question = session.foxyWakeTurn === turn ? afterWake(text) : text.trim();
+  // Only the wake turn earns a greeting; an empty or noise-only turn later is ignored.
+  if (!question && session.foxyWakeTurn !== turn) return;
+  session.foxyThinking = turn;
+  session.foxyNudged = false;
+  session.turnEndedAt = performance.now();
+  const history = [...session.foxyHistory];
+  const line = question ? await askFoxy(history, session.storySoFar, question) : "Hi! What's your question?";
+  if (session.closed || session.mode !== "foxy" || session.foxyThinking !== turn) return;
+  session.foxyHistory = history;
+  await speak(session, "foxy", line);
+  if (session.foxyThinking === turn) session.foxyThinking = null;
+}
+
+async function endFoxy(session: Session, bye = "Okay! Back to the story!") {
+  const turn = session.inkTurn;
+  session.foxyThinking = turn;
+  await speak(session, "foxy", bye);
+  // Not cancellable: a sound over the goodbye must not leave the story paused.
+  if (session.closed || session.mode !== "foxy") return;
+  session.foxyThinking = null;
+  send(session, { type: "foxy", on: false });
+  session.mode = session.foxyPrev;
+  session.waitingSince = performance.now();
+  session.reader?.restartClock();
+  if (session.foxyPrev === "listening" && session.lastAsk) {
+    void speak(session, session.lastAsk.speaker, session.lastAsk.line, true);
+  }
+  session.foxyWaiters.splice(0).forEach((resolve) => resolve());
+}
+
+// ---------------------------------------------------------------------------
 // READ ALOUD
 
-function readAloud(session: Session, line: string): Promise<void> {
+async function readAloud(session: Session, line: string): Promise<void> {
+  await untilFoxyGone(session);
+  if (session.closed) return;
   const reader = new Reader([{ words: line.split(/\s+/).filter(Boolean) }]);
   session.reader = reader;
   session.mode = "reading";
@@ -325,6 +431,9 @@ function coach(session: Session) {
 
 /** Asks a question and resolves with the answer, or null after SILENCE_MS. */
 async function ask(session: Session, speaker: Speaker, line: string): Promise<string | null> {
+  await untilFoxyGone(session);
+  if (session.closed) return null;
+  session.lastAsk = { speaker, line };
   // Listen before speaking, so an answer that talks over the question counts.
   const heard = new Promise<string | null>((resolve) => (session.onAnswer = resolve));
   session.mode = "listening";
@@ -353,6 +462,17 @@ setInterval(() => {
     if (session.audioPlaying && now - session.audioAt > 20_000) played(session);
     if (session.audioPlaying) continue;
 
+    if (session.mode === "foxy") {
+      if (!session.childTalking && session.foxyThinking === null && now - session.waitingSince > 10_000) {
+        if (session.foxyNudged) void endFoxy(session, "Okay, back to the story!");
+        else {
+          session.foxyNudged = true;
+          void speak(session, "foxy", "Any other questions?");
+        }
+      }
+      continue;
+    }
+
     if (session.mode === "reading" && session.reader?.isStalled(now)) coach(session);
 
     if (
@@ -375,6 +495,7 @@ async function runStory(session: Session) {
   };
 
   for (const step of SCRIPT) {
+    await untilFoxyGone(session);
     if (session.closed) return;
     switch (step.kind) {
       case "scene":
@@ -398,6 +519,8 @@ async function runStory(session: Session) {
         break;
     }
   }
+  await untilFoxyGone(session);
+  if (session.closed) return;
   send(session, { type: "end", demo: false });
 }
 
@@ -426,6 +549,15 @@ Bun.serve<{ demo: boolean }, never>({
         demo: ws.data.demo,
         closed: false,
         mode: "idle",
+        foxyPrev: "idle",
+        foxyWaiters: [],
+        cutByFoxy: null,
+        foxyNudged: false,
+        foxyThinking: null,
+        foxyWakeTurn: -1,
+        foxyHistory: [],
+        storySoFar: [],
+        lastAsk: null,
         turnEndedAt: null,
         contextId: null,
         audioPlaying: false,
@@ -475,7 +607,13 @@ Bun.serve<{ demo: boolean }, never>({
 
     close(ws) {
       const session = sessions.get(ws as unknown as WebSocket);
-      if (session) session.closed = true;
+      if (session) {
+        session.closed = true;
+        played(session);
+        session.foxyWaiters.splice(0).forEach((resolve) => resolve());
+        session.onRead?.();
+        session.onAnswer?.(null);
+      }
       session?.ink.close();
       session?.sonic.close();
       sessions.delete(ws as unknown as WebSocket);

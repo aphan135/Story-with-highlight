@@ -5,10 +5,10 @@
 // the mic up and plays the voices back.
 //
 //   server -> page: scene, screen, line, read, progress, stuck, readDone, end,
-//                   partial, latency, audio, audio_done, stop_audio
+//                   foxy, partial, latency, audio, audio_done, stop_audio
 //   page -> server: mic audio (binary PCM16 @16k), { type: "played", id }
 
-export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf";
+export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf" | "foxy";
 
 export type ServerMessage =
   | { type: "scene"; title: string; art: string; caption: string; image?: string }
@@ -18,6 +18,7 @@ export type ServerMessage =
   | { type: "progress"; word: number }
   | { type: "stuck"; word: number }
   | { type: "readDone" }
+  | { type: "foxy"; on: boolean }
   | { type: "end"; demo: boolean }
   | { type: "partial"; text: string }
   | { type: "latency"; ms: number };

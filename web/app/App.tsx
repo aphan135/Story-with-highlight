@@ -48,6 +48,8 @@ export default function App() {
           narration={story.narration}
           line={story.line}
           reading={story.reading}
+          foxy={story.foxy}
+          foxyLine={story.foxyLine}
           partial={story.partial}
           error={story.error}
           onRestart={story.start}

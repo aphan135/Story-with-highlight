@@ -147,6 +147,23 @@ button.cover:hover { transform: scale(1.04); }
 .left .tail { left: calc(165.3 * var(--u)); }
 .reading { outline: calc(5 * var(--u)) solid var(--sq-fox); }
 
+/* The picture blurs while Foxy is up. The scale hides the soft edges the blur leaves. */
+.scene, .sceneFull { transition: filter .3s ease, transform .3s ease; }
+.blurred { filter: blur(calc(10 * var(--u))); transform: scale(1.04); }
+.foxPop {
+  left: calc(60 * var(--u)); bottom: calc(60 * var(--u)); width: calc(340 * var(--u)); height: calc(355 * var(--u));
+  animation: foxUp .4s ease-out;
+}
+.foxyBubble { left: calc(140 * var(--u)); bottom: calc(437 * var(--u)); width: calc(820 * var(--u)); }
+.foxyBubble .tail { left: calc(90 * var(--u)); }
+.foxyHint {
+  left: calc(470 * var(--u)); right: calc(60 * var(--u)); bottom: calc(160 * var(--u)); margin: 0;
+  padding: calc(12 * var(--u)) calc(18 * var(--u)); border-radius: calc(16 * var(--u));
+  background: var(--sq-paper);
+  font: 700 calc(23.891 * var(--u))/1.25 var(--font-body), sans-serif;
+}
+@keyframes foxUp { from { transform: translateY(100%); } to { transform: none; } }
+
 /* READ ALOUD word highlighting (../reader.ts drives progress and stuck). */
 .w { display: inline-block; margin-right: .28em; padding: 0 .08em; border-radius: calc(8 * var(--u)); transition: background .15s; }
 .wRead { background: var(--sq-mark); }
@@ -156,7 +173,7 @@ button.cover:hover { transform: scale(1.04); }
 
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .bubble { animation: none; }
-  .wave i { transition: none; }
+  .bubble, .foxPop { animation: none; }
+  .wave i, .scene, .sceneFull { transition: none; }
   button.cover { transition: none; }
 }

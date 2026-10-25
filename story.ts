@@ -12,7 +12,7 @@
  * child says. Read lines are checked word by word (reader.ts).
  */
 
-export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf";
+export type Speaker = "narrator" | "firstPig" | "secondPig" | "wolf" | "foxy";
 
 export type QuestionId = "buildingIdea" | "whyStanding" | "tellStory";
 
@@ -39,6 +39,7 @@ export const SCRIPT: Step[] = [
   // --- DEMO START ----------------------------------------------------------
   scene("A House of Your Own", "🌾 🐖 🐖 🐷 🌾",
     "Three little pigs stand in a field. The youngest pig steps forward.", "opening"),
+  say("narrator", "Say “hey Foxy” if you want to ask a question."),
   say("narrator", "Three little pigs were building homes of their own."),
   read("I'll build a house, too!"),
 
